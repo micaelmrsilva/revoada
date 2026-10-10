@@ -4,7 +4,7 @@
 <dict>
   <key>CFBundleName</key><string>Revoada</string>
   <key>CFBundleDisplayName</key><string>Revoada</string>
-  <key>CFBundleIdentifier</key><string>dev.micaelmarques.revoada</string>
+  <key>CFBundleIdentifier</key><string>dev.revoada.app</string>
   <key>CFBundleExecutable</key><string>Revoada</string>
   <key>CFBundleIconFile</key><string>AppIcon</string>
   <key>CFBundlePackageType</key><string>APPL</string>

@@ -1,27 +1,100 @@
-# revoada
+# Revoada
 
-Painel local pra rodar várias contas de Claude, Codex, Gemini e Grok num ponto só.
+Um app para macOS que junta as suas contas de agentes de código (Claude Code, Codex, Gemini CLI, Grok) num lugar só: uma conversa, várias contas, e o trabalho continua quando uma delas bate no limite.
+
+*A local macOS app that runs several Claude Code, Codex, Gemini CLI and Grok accounts side by side, rotates between them when one hits its usage limit, and carries the conversation along. Interface in Brazilian Portuguese.*
+
+## O que faz
+
+- **Várias contas por provedor.** Cada conta é um perfil com configuração isolada. O login é o do CLI oficial; a Revoada não copia token nem fala com a API por conta própria.
+- **Conversa de verdade.** Mensagens, texto formatado, comandos com a saída, arquivos editados e o diff do que mudou, em vez da tela crua do terminal. O terminal de cada agente continua disponível.
+- **Rodízio que leva a conversa.** Quando uma conta bate no limite, o pedido continua na próxima, com o histórico do que foi dito e feito. Vale também para trocar de agente à mão, até entre provedores.
+- **Permissão por ação.** No modo "Pergunta antes", o agente para e mostra o comando ou o arquivo antes de agir. Você permite, permite sempre naquela conversa, ou nega.
+- **Consumo à vista.** Quanto cada conta já usou das janelas do provedor, e o rodízio começa pela mais folgada.
+- **Cérebro compartilhado.** Um cofre do [Obsidian](https://obsidian.md) que espelha a memória de cada agente e entrega as notas relevantes como contexto de cada pedido, para qualquer conta. Temas sensíveis (finanças, infraestrutura) ficam de fora.
+- **Cópia isolada por tarefa.** Cada tarefa paralela pode rodar num `git worktree` próprio, que some sozinho quando o trabalho vira PR. Também acha e limpa os clones que os agentes deixam para trás.
+- **Conversas dos outros programas.** O que o Claude Code e o Codex já guardaram na máquina aparece na lateral e continua na sessão original.
+- **Mac acordado enquanto os agentes trabalham**, e só enquanto trabalham. Com a tampa fechada também, depois de um passo de administrador.
+- **Barra de menus.** Um painel com o que está rodando, limites e um campo de pedido rápido (`⌃⌥Espaço`).
+
+## Requisitos
+
+- macOS 13 ou mais novo, em Apple Silicon.
+- [Bun](https://bun.sh) 1.4 ou mais novo.
+- Ferramentas de linha de comando do Xcode (`xcode-select --install`), para montar o app.
+- Pelo menos um dos CLIs instalado e logado: [Claude Code](https://claude.com/claude-code), [Codex](https://github.com/openai/codex), [Gemini CLI](https://github.com/google-gemini/gemini-cli) ou Grok CLI.
+- Opcionais: [GitHub CLI](https://cli.github.com) (estado dos PRs na limpeza de clones), Obsidian (para abrir o cofre) e [Ollama](https://ollama.com) (busca por significado no cérebro).
+
+## Instalar
 
 ```bash
+git clone <este repositório> revoada
+cd revoada
 bun install
+bun run app:install
+```
+
+O último comando roda os testes, monta `Revoada.app` e copia para `/Applications`. O app é assinado só localmente: funciona na máquina em que foi montado. Para distribuir é preciso um certificado Developer ID (veja [Distribuir](#distribuir)).
+
+Para rodar sem o app, direto no navegador:
+
+```bash
 bun start   # http://127.0.0.1:4777
 ```
 
-- Cada conta é um perfil com diretório de config isolado em `~/.revoada/profiles/<id>`
-  (`CLAUDE_CONFIG_DIR`, `CODEX_HOME`, `GEMINI_CLI_HOME`, `GROK_HOME`). O login é o do CLI oficial.
-- Campo de pedido: uma conta abre a sessão interativa do agente; várias respondem em paralelo.
-- Rodízio: alvo por provedor usa a conta livre usada há mais tempo e troca sozinho se bater no limite.
-- Cérebro (`brain.ts`): cofre do Obsidian em `~/revoada-cerebro` (ou `REVOADA_VAULT`). `Agentes/` e
-  `Projetos/` espelham a memória de cada agente (a origem manda, a sincronização sobrescreve);
-  `Revoada/` são as notas próprias. Busca BM25 local, sem modelo; os trechos relevantes entram
-  como contexto do pedido.
-- Conversas encerradas ficam em `~/.revoada/history`.
-- O servidor só escuta em 127.0.0.1 e recusa chamadas de outra origem.
-- Fora do contexto: temas (finanças, infra) e notas avulsas que nunca são enviadas aos provedores,
-  em `~/.revoada/brain-rules.json`. Continuam no cofre e na busca local.
-- Ensinar agentes: um bloco entre `<!-- revoada:cerebro:inicio/fim -->` no arquivo de instruções
-  globais de cada conta (CLAUDE.md, AGENTS.md, GEMINI.md). Só o bloco é do painel; o original fica
-  copiado em `<arquivo>.antes-da-revoada`.
+## Como funciona
+
+A Revoada é um servidor local em Bun com uma página, embrulhado numa janela nativa.
+
+| Arquivo | Papel |
+| --- | --- |
+| `server.ts` | Servidor HTTP e WebSocket: contas, sessões de terminal, respostas em paralelo, ajustes. |
+| `convos.ts` | Conversas. Roda cada resposta no modo estruturado do CLI e traduz os eventos em itens. Cuida da retomada de sessão, do rodízio e dos pedidos de permissão. |
+| `brain.ts` | Cérebro: espelho da memória dos agentes num cofre, regras de bloqueio e busca. |
+| `clones.ts` | Cópias de repositório: detecção, classificação e limpeza. |
+| `history.ts` | Leitura do histórico do Claude Code e do Codex. |
+| `public/` | A página principal (`index.html`) e o painel da barra de menus (`mini.html`). |
+| `desktop/` | A janela nativa em Swift: sobe o servidor, barra de menus, avisos e vigília. |
+
+**Contas isoladas.** Cada conta extra é um diretório em `~/.revoada/profiles/<id>`, passado ao CLI pela variável que ele já entende (`CLAUDE_CONFIG_DIR`, `CODEX_HOME`, `GEMINI_CLI_HOME`, `GROK_HOME`). A conta "padrão desta máquina" é a que o CLI usa fora do app.
+
+**Conversa e rodízio.** Enquanto a conta é a mesma, cada resposta retoma a sessão nativa do agente. Quando a conta muda, a próxima recebe um resumo do que foi dito e feito na frente do pedido. O limite é detectado pela mensagem de erro do próprio CLI.
+
+**Cérebro.** `Agentes/` e `Projetos/` no cofre são espelho (a origem manda, a sincronização sobrescreve). `Revoada/` são notas próprias, onde você ou qualquer agente pode escrever. A busca é local, por palavra (BM25); com um modelo de embeddings no Ollama passa a considerar também o significado.
+
+## Segurança
+
+A Revoada executa agentes que rodam comandos na sua máquina. Por isso:
+
+- O servidor só escuta em `127.0.0.1` e recusa qualquer chamada cuja origem não seja a própria página.
+- Nenhum token ou credencial passa pelo app: a autenticação é toda dos CLIs.
+- No modo "Pergunta antes" o agente não age sem sua resposta. Hoje só o Claude oferece isso; os outros caem para "Pode editar", com aviso na conversa.
+- Notas de tema bloqueado não são copiadas para o cofre nem enviadas como contexto. O bloqueio vale para o que a Revoada envia; um agente com acesso a arquivos ainda pode ler a pasta de memória de outro.
+- Usar várias contas pode ter regras próprias em cada provedor. Leia os termos de uso de cada um.
+
+## Onde ficam os seus dados
+
+Nada sai da máquina além do que cada CLI já envia ao próprio provedor.
+
+| Caminho | Conteúdo |
+| --- | --- |
+| `~/.revoada/` | Contas, conversas, anexos, consumo, ajustes e o registro do app. |
+| `~/revoada-cerebro/` | O cofre do cérebro. |
+| `~/.revoada/worktrees/` | Cópias isoladas criadas para tarefas. |
+
+Variáveis de ambiente: `REVOADA_HOME` (dados), `REVOADA_VAULT` (cofre), `REVOADA_PROJECTS` (pasta dos seus repositórios, padrão `~/git`) e `PORT`.
+
+## Mac acordado com a tampa fechada
+
+Com a tampa aberta, a Revoada já segura o Mac acordado enquanto há agente trabalhando, sem configuração. Com a tampa fechada o macOS exige desligar o sono do sistema, o que precisa de administrador:
+
+```bash
+scripts/vigilia-setup.sh
+```
+
+O script instala uma regra de `sudo` restrita a `pmset -a disablesleep 0` e `1`, e um vigia que religa o sono se o app morrer ou passar de 6 horas. A regra vale para qualquer programa rodando como o seu usuário. Para desfazer: `scripts/vigilia-setup.sh --remover`.
+
+O Mac volta a dormir quando ninguém trabalha, com bateria abaixo de 15% ou em temperatura crítica. **Use em superfície ventilada, nunca dentro de mochila.**
 
 ## Testes
 
@@ -29,63 +102,34 @@ bun start   # http://127.0.0.1:4777
 bun test
 ```
 
-`tests/flows.test.ts` sobe o servidor de verdade numa pasta de usuário descartável, com CLIs de mentira no
-PATH (`tests/stubs/codex` e `tests/stubs/claude` falam os mesmos protocolos dos reais), e exercita pela API:
-contas, conversa, rodízio com histórico, retomada de sessão, permissão, consumo, título, anexos, cérebro
-(bloqueio e contexto), ensino dos agentes, cópia isolada, classificação de clones e importação de histórico.
-Não toca na sua pasta de usuário nem gasta conta de verdade. Rode antes de `bun run app:install`.
+`tests/flows.test.ts` sobe o servidor de verdade numa pasta de usuário descartável, com CLIs de mentira no `PATH` (`tests/stubs/`) que falam os mesmos protocolos dos reais. Cobre contas, conversa, rodízio, permissão, consumo, anexos, cérebro, cópias e importação. Não toca na sua pasta de usuário nem gasta conta.
 
-## App desktop (macOS)
+O que os testes não cobrem: a interface, a janela nativa e os CLIs reais. Se um provedor mudar o formato de saída, os testes continuam passando.
+
+## Distribuir
 
 ```bash
-bun run app:install   # monta dist/Revoada.app e copia para /Applications
+SIGN_ID="Developer ID Application: Nome (TEAMID)" NOTARY_PROFILE=<perfil> bun run app:zip
 ```
 
-`desktop/main.swift` é a janela nativa (WKWebView): sobe o servidor compilado que vai dentro do
-bundle, espera responder e mostra a página. Sair do app encerra o servidor; fechar a janela não.
-Se já houver um painel na porta 4777 (`bun start`), o app só se conecta a ele. Registro em
-`~/.revoada/app.log`. A logo é `public/icon.svg` (ícone) e `public/logo.svg` (interface).
-`desktop/status.swift` é a presença na barra de menus: número de agentes trabalhando, ponto vermelho
-com conta no limite, menu com conversas, limites e logins, avisos do sistema e selo no Dock. Lê
-`/api/state` a cada 2,5s; "trabalhando" = sessão que escreveu na tela nos últimos 5s ou disparo rodando.
+Sem `SIGN_ID`, o zip abre em outro Mac por clique direito > Abrir.
 
-## Clones
-`clones.ts` acha cópias de repositório deixadas pelos agentes (clones lado a lado em `~/git` e
-worktrees), mede e classifica. "Pode apagar" = nada que só exista ali. A limpeza automática (opcional)
-só leva cópia limpa, com PR, sem sessão aberta e parada há mais de 1h. Tudo vai para a Lixeira do macOS.
+## Limitações conhecidas
 
-## Conversas
-`convos.ts` roda cada resposta no modo estruturado do CLI (`codex exec --json`, `claude -p --output-format
-stream-json`, `gemini --output-format stream-json`) e traduz os eventos em itens (texto, comando, arquivos,
-raciocínio). Mesma conta = retoma a sessão nativa; conta diferente (limite, rodízio, troca manual) = sessão
-nova com o histórico da conversa na frente do pedido. Guardadas em `~/.revoada/convos`.
+- Só macOS em Apple Silicon. O servidor roda em Linux (é onde os testes rodam), mas o app não.
+- Interface só em português.
+- Aprovação por ação e texto ao vivo funcionam só com o Claude.
+- O Grok não tem modo estruturado conhecido: a resposta chega como texto único.
+- Reinstalar o app encerra as sessões de terminal abertas.
 
-Cópia isolada: `git worktree` em `~/.revoada/worktrees/<repo>/<tarefa>`, branch `revoada/<tarefa>`. Sai
-sozinha quando fica limpa e com tudo no remoto; volta do branch se a conversa continuar.
+## Créditos
 
-Cérebro: notas de tema bloqueado não são espelhadas no cofre. Busca por significado é opcional, via
-Ollama local (`bge-m3`), e mistura com a busca por palavra.
+- Terminal embutido: [xterm.js](https://xtermjs.org) (MIT).
+- A vigília foi inspirada no [Insomnia](https://github.com/krishhgg/Insomnia) (MIT), sem usar código dele.
+- Tipografia: Geist (SIL Open Font License), carregada do Google Fonts.
 
-App: ⌃⌥Espaço abre o pedido rápido; "Abrir ao iniciar o Mac" no menu Revoada. Para distribuir:
-`SIGN_ID="Developer ID Application: ..." NOTARY_PROFILE=... bun run app:zip`.
+Revoada não é afiliada à Anthropic, OpenAI, Google ou xAI. Os nomes dos produtos pertencem aos respectivos donos.
 
-## 1.2
-- Modo "Pergunta antes": o Claude roda com `--permission-prompt-tool stdio` e cada pedido de permissão vira
-  um cartão na conversa (permitir, sempre nesta conversa, negar). Codex e Gemini não têm isso no modo usado
-  aqui e caem para "pode editar".
-- Consumo: Claude informa as janelas de 5h e 7 dias em cada resposta; do Codex é lido do arquivo da sessão.
-  O rodízio começa pela conta mais folgada. Guardado em `~/.revoada/usage.json`.
-- Texto ao vivo no Claude (`--include-partial-messages`). Anexos em `~/.revoada/attachments`: imagem vai
-  nativa para Claude e Codex; outros arquivos vão como caminho.
-- Título automático pelo Claude Haiku depois da primeira resposta.
-- `history.ts`: lista as sessões que o Claude Code e o Codex já guardaram e abre cada uma como conversa,
-  ligada à sessão original (continuar retoma o mesmo id).
+## Licença
 
-## Vigília (Mac acordado enquanto os agentes trabalham)
-`desktop/vigil.swift`. Com a tampa aberta, uma assertion do sistema segura o Mac acordado enquanto há
-agente trabalhando e por 90s depois (sem senha). Com a tampa fechada é preciso desligar o sono do sistema,
-o que exige administrador: `scripts/vigilia-setup.sh` instala uma regra de sudo restrita a
-`pmset -a disablesleep 0|1` e um vigia (LaunchAgent) que religa o sono se o app morrer ou passar de 6h.
-Travas: volta a dormir com bateria abaixo de 15%, com o Mac em temperatura crítica, ou quando ninguém
-trabalha. O que é mudado fica anotado em `~/.revoada/vigil.json` antes de mudar. Inspirado no Insomnia
-(github.com/krishhgg/Insomnia, MIT), sem código dele.
+[MIT](LICENSE).

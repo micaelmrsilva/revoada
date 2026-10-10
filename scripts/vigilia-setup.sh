@@ -5,16 +5,16 @@
 # O que instala:
 #   /etc/sudoers.d/revoada   seu usuário pode rodar, sem senha, só estes dois comandos:
 #                              pmset -a disablesleep 1   e   pmset -a disablesleep 0
-#   ~/Library/LaunchAgents/dev.micaelmarques.revoada.vigia.plist
+#   ~/Library/LaunchAgents/dev.revoada.vigia.plist
 #                            vigia que roda a cada minuto e religa o sono do sistema se o app
 #                            morreu ou passou do tempo máximo, e retoma apps que ficaram pausados
 #
 # Para desfazer:  scripts/vigilia-setup.sh --remover
 set -euo pipefail
 RULE=/etc/sudoers.d/revoada
-AGENT="$HOME/Library/LaunchAgents/dev.micaelmarques.revoada.vigia.plist"
+AGENT="$HOME/Library/LaunchAgents/dev.revoada.vigia.plist"
 BACKSTOP="$HOME/.revoada/vigia.sh"
-LABEL=dev.micaelmarques.revoada.vigia
+LABEL=dev.revoada.vigia
 
 if [ "${1:-}" = "--remover" ]; then
   sudo /usr/bin/pmset -a disablesleep 0 || true

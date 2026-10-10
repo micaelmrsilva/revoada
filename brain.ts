@@ -75,7 +75,7 @@ function analyze(note: string, raw: string) {
   return out;
 }
 
-export function createBrain(opts: { home: string; vault: string; rulesFile: string; cacheDir: string; claudeHomes: () => { dir: string; tag: string }[]; codexHomes: () => { dir: string; tag: string }[] }) {
+export function createBrain(opts: { home: string; vault: string; projects: string; rulesFile: string; cacheDir: string; claudeHomes: () => { dir: string; tag: string }[]; codexHomes: () => { dir: string; tag: string }[] }) {
   const { home, vault } = opts;
   const manifestFile = join(vault, ".revoada-manifest.json");
   const vecFile = join(opts.cacheDir, `embeddings-${EMBED_MODEL.replace(/[^a-z0-9]+/gi, "-")}.json`);
@@ -131,7 +131,7 @@ export function createBrain(opts: { home: string; vault: string; rulesFile: stri
     add(join(home, ".gemini", "GEMINI.md"), "Agentes/Gemini/GEMINI.md");
     for (const f of walk(join(home, ".grok", "memory-v2"))) add(f, `Agentes/Grok/${relative(join(home, ".grok", "memory-v2"), f)}`);
     // instruções de projeto: é onde cada agente aprende o repositório
-    const git = join(home, "git");
+    const git = opts.projects;
     const projDirs: string[] = [];
     try {
       for (const a of readdirSync(git, { withFileTypes: true })) {

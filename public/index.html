@@ -381,7 +381,7 @@
 <dialog id="dlg">
   <h2 id="dlgTitle"></h2>
   <div class="f" id="dProvField"><span class="label">Provedor</span><div class="seg" id="dProv"></div></div>
-  <div class="f"><label class="label" for="dLabel">Nome da conta</label><input type="text" id="dLabel" placeholder="ex.: pessoal, Arara, cliente X"></div>
+  <div class="f"><label class="label" for="dLabel">Nome da conta</label><input type="text" id="dLabel" placeholder="ex.: pessoal, trabalho, cliente X"></div>
   <div class="f" id="dEnvField"><label class="label" for="dEnv">Variáveis só desta conta</label>
     <textarea id="dEnv" spellcheck="false" placeholder="GEMINI_API_KEY=..."></textarea><div class="hint" id="dEnvHint"></div></div>
   <div class="hint" id="dAddHint">Ao salvar, o login oficial do provedor abre aqui no painel.</div>
@@ -494,7 +494,7 @@ $("tq").onkeydown = (e) => { if (e.key === "Escape") { $("tq").value = ""; rende
 
 async function refresh(force) {
   S = await api("state" + (force ? "?refresh=1" : ""));
-  if (!$("cwd").value) $("cwd").value = store.get("cwd", S.home + "/git");
+  if (!$("cwd").value) $("cwd").value = store.get("cwd", S.projects);
   // sessão aberta pelo rodízio: leva a conversa junto
   for (const s of S.sessions) {
     if (!seen.has(s.id) && seen.size && s.rotatedFrom) { if (view.type === "session" && view.id === s.rotatedFrom) view = { type: "session", id: s.id }; toast(`Conta no limite. Continuando em ${accName(acc(s.accountId))}.`); }

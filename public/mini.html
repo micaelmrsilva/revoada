@@ -124,7 +124,7 @@ function target() {
   const p = S.providers.find((p) => S.accounts.some((a) => a.provider === p.id && ready(a)));
   return p ? "pool:" + p.id : null;
 }
-const cwd = () => store("cwd", S.home + "/git");
+const cwd = () => store("cwd", S.projects);
 
 function render() {
   if (!S) return;

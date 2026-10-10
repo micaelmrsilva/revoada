@@ -2,7 +2,7 @@
   "name": "revoada",
   "private": true,
   "version": "1.2.0",
-  "description": "Painel local pra rodar várias contas de Claude, Codex, Gemini e Grok num ponto só",
+  "description": "App para macOS que roda várias contas de agentes de código num lugar só, com rodízio que leva a conversa",
   "scripts": {
     "start": "bun server.ts",
     "dev": "bun --watch server.ts",
@@ -14,5 +14,6 @@
   "dependencies": {
     "@xterm/addon-fit": "^0.11.0",
     "@xterm/xterm": "^6.0.0"
-  }
+  },
+  "license": "MIT"
 }

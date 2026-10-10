@@ -12,6 +12,8 @@ const HOME = homedir();
 const ROOT = process.env.REVOADA_HOME || join(HOME, ".revoada");
 const PORT = Number(process.env.PORT || 4777);
 const PROFILES = join(ROOT, "profiles");
+// pasta onde ficam os seus repositórios: é onde o painel procura projetos, instruções e clones
+const PROJECTS = process.env.REVOADA_PROJECTS || join(HOME, "git");
 const ACCOUNTS_FILE = join(ROOT, "accounts.json");
 // no app desktop o servidor é um binário compilado e os arquivos da página vêm do bundle
 const ASSETS = process.env.REVOADA_ASSETS;
@@ -259,6 +261,7 @@ const settingsEarly: { vault?: string } = readJson(join(ROOT, "settings.json")) 
 const brain = createBrain({
   home: HOME,
   rulesFile: join(ROOT, "brain-rules.json"),
+  projects: PROJECTS,
   cacheDir: ROOT,
   vault: process.env.REVOADA_VAULT || settingsEarly.vault || join(HOME, "revoada-cerebro"),
   claudeHomes: () => [{ dir: join(HOME, ".claude"), tag: "" }, ...accounts.filter((a) => a.provider === "claude" && a.home).map((a) => ({ dir: a.home!, tag: ` (${a.label})` }))],
@@ -518,7 +521,7 @@ const history = createHistory({
 // ---------- cópias de repositório deixadas pelos agentes ----------
 const clones = createClones({
   home: HOME,
-  roots: [join(HOME, "git")],
+  roots: [PROJECTS],
   extra: [".codex/worktrees", ".cursor/worktrees", ".claude/worktrees", ".claude-worktrees"].map((d) => join(HOME, d)),
   managedRoot: WORKTREES,
   inUse: (path) => convos.inUse(path) || [...sessions.values()].some((s) => s.alive && (s.cwd === path || s.cwd.startsWith(path + "/"))) || runs.some((r) => r.jobs.some((j) => j.state === "rodando") && (r.cwd === path || r.cwd.startsWith(path + "/"))),
@@ -623,7 +626,7 @@ const json = (data: unknown, status = 200) => Response.json(data, { status });
 const fail = (msg: string, status = 400) => json({ error: msg }, status);
 
 function listDirs() {
-  const base = join(HOME, "git");
+  const base = PROJECTS;
   const out: string[] = [HOME, base];
   const sub = (dir: string) => {
     try {
@@ -647,7 +650,7 @@ async function state(refresh: boolean) {
   const pending = stale.map(refreshStatus);
   if (refresh || stale.some((a) => !statusCache.has(a.id))) await Promise.all(pending);
   return {
-    home: HOME,
+    home: HOME, projects: PROJECTS,
     providers: Object.entries(PROVIDERS).map(([id, p]) => ({ id, name: p.name, installed: !!binPath(id) })),
     accounts: accounts.map((a) => ({
       id: a.id, provider: a.provider, label: a.label, isolated: !!a.home, envKeys: Object.keys(a.env || {}),
@@ -669,16 +672,16 @@ function demoState(real: any) {
   return { ...real,
     accounts: [
       { id: "c1", provider: "claude", label: "pessoal", status: { ok: true, detail: "" }, limit: { until: now + 82 * 60_000, at: now - 40 * 60_000, reason: "5-hour limit reached" } },
-      { id: "c2", provider: "claude", label: "Arara", status: { ok: true, detail: "" }, limit: null },
+      { id: "c2", provider: "claude", label: "trabalho", status: { ok: true, detail: "" }, limit: null },
       { id: "c3", provider: "claude", label: "cliente", status: { ok: false, detail: "sem login" }, limit: null },
       { id: "x1", provider: "codex", label: "padrão", status: { ok: true, detail: "" }, limit: null },
       { id: "g1", provider: "gemini", label: "Google", status: { ok: true, detail: "" }, limit: null },
     ],
     sessions: [
-      { id: "s1", accountId: "c2", kind: "chat", cwd: "/x/git/sabia", startedAt: now - 134_000, title: "Refatora o parser de CNPJ e roda os testes", alive: true, busy: true },
+      { id: "s1", accountId: "c2", kind: "chat", cwd: "/x/git/api", startedAt: now - 134_000, title: "Refatora o parser de CNPJ e roda os testes", alive: true, busy: true },
       { id: "s2", accountId: "x1", kind: "chat", cwd: "/x/git/revoada", startedAt: now - 912_000, title: "Revisa o diff e aponta defeitos reais", alive: true, busy: false },
     ],
-    runs: [{ id: "r1", title: "Compara três abordagens de cache", cwd: "/x/git/prospect", at: now - 41_000, running: true, jobs: 3 }],
+    runs: [{ id: "r1", title: "Compara três abordagens de cache", cwd: "/x/git/loja", at: now - 41_000, running: true, jobs: 3 }],
   };
 }
 
