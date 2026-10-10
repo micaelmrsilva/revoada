@@ -164,7 +164,7 @@ function itemHtml(it, key) {
     if (it.state !== "pending") return `<div class="ask done">${it.state === "allowed" ? "Permitido" : "Negado"} · ${esc(it.tool)} · ${esc(it.detail)}</div>`;
     return `<div class="ask"><b>O agente quer ${esc(what)}:</b><code>${esc(it.detail)}</code><div class="btns"><button class="btn line" data-decide="deny" data-req="${esc(it.req)}">Negar</button><button class="btn" data-decide="allow" data-req="${esc(it.req)}">Permitir</button></div></div>`;
   }
-  if (it.kind === "cmd") { const run = it.exit == null && it.status !== "failed"; return `<details class="act" data-key="${esc(key)}" ${openActs.has(key) ? "open" : ""}><summary><span class="what">${esc(it.command)}</span><span class="s ${run ? "run" : it.exit ? "bad" : ""}">${run ? "rodando" : it.exit ? `saiu com ${it.exit}` : "ok"}</span></summary><pre>${esc(it.output) || "sem saída"}</pre></details>`; }
+  if (it.kind === "cmd") { const run = it.exit == null && it.status !== "failed"; return `<details class="act" data-key="${esc(key)}" ${openActs.has(key) ? "open" : ""}><summary><span class="what">${esc(it.desc || it.command)}</span><span class="s ${run ? "run" : it.exit ? "bad" : ""}">${run ? "rodando" : it.exit ? `saiu com ${it.exit}` : "ok"}</span></summary><pre>${esc(it.output) || "sem saída"}</pre></details>`; }
   if (it.kind === "files") return `<div class="files">Mexeu em ${it.changes.map((c) => `<span>${esc(c.path)}</span>`).join(", ")}</div>`;
   if (it.kind === "tool") return `<div class="files">Usou <span>${esc(it.name)}</span> ${esc(it.detail)}${it.status === "failed" ? " · falhou" : ""}</div>`;
   if (it.kind === "todo") return `<div class="files">${it.items.map((t) => `${t.done ? "✓" : "○"} <span>${esc(t.text)}</span>`).join("<br>")}</div>`;

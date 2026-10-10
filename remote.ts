@@ -50,7 +50,7 @@ export function createRemote(d: {
     if (it.kind === "text") return { k: it.k, kind: it.kind, text: clip(it.text, TEXT_CHARS) };
     if (it.kind === "note") return { k: it.k, kind: it.kind, text: it.text, tone: it.tone };
     if (it.kind === "ask") return { k: it.k, kind: it.kind, req: it.req, tool: it.tool, detail: clip(it.detail, OUT_CHARS), state: it.state };
-    if (it.kind === "cmd") return { k: it.k, kind: it.kind, command: clip(it.command, 400), exit: it.exit, status: it.status, output: clip(it.output, OUT_CHARS) };
+    if (it.kind === "cmd") return { k: it.k, kind: it.kind, command: clip(it.command, 400), desc: it.desc, exit: it.exit, status: it.status, output: clip(it.output, OUT_CHARS) };
     if (it.kind === "files") return { k: it.k, kind: it.kind, changes: it.changes.map((c) => ({ path: basename(c.path), kind: c.kind })) };
     if (it.kind === "tool") return { k: it.k, kind: it.kind, name: it.name, detail: clip(it.detail, 200), status: it.status };
     if (it.kind === "todo") return { k: it.k, kind: it.kind, items: it.items };

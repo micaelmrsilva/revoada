@@ -2,7 +2,7 @@
 // guarda notas próprias. A busca é local: BM25 sempre, e por significado quando há um
 // modelo de embeddings no Ollama. Devolve trechos pra entrar como contexto de qualquer conta.
 // Notas de tema bloqueado nem chegam a ser espelhadas no cofre.
-import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from "fs";
 import { basename, dirname, join, relative } from "path";
 
 const MAX_NOTE_BYTES = 300_000;
@@ -195,7 +195,7 @@ export function createBrain(opts: { home: string; vault: string; projects: strin
     const topicRe = topicRegexes();
     for (const file of walk(vault)) {
       const note = relative(vault, file);
-      if (note === "Cérebro.md" || note === "Revoada/Leia-me.md") continue;
+      if (note === "Cérebro.md" || note === "Revoada/Leia-me.md" || note.startsWith("Revoada/Arquivo/")) continue;
       const parts = note.split("/");
       const agent = parts[0] === "Agentes" ? parts[1] : parts[0] === "Projetos" ? "Projetos" : parts[0] === "Revoada" ? "Revoada" : "Cofre";
       counts[agent] = (counts[agent] || 0) + 1;
@@ -351,6 +351,65 @@ export function createBrain(opts: { home: string; vault: string; projects: strin
     return `Revoada/${name}.md`;
   }
 
+  // ---------- arrumação ----------
+  // Só nas notas próprias (Revoada/): o resto do cofre é espelho e se refaz sozinho. Nada é apagado:
+  // arquivar é mover para Revoada/Arquivo/, que fica fora da busca e do contexto.
+  const STALE_MS = 180 * 86_400_000;
+  const SIMILAR = 0.6;
+  function ownNotes() {
+    const dir = join(vault, "Revoada");
+    let names: string[] = [];
+    try { names = readdirSync(dir).filter((n) => n.endsWith(".md") && n !== "Leia-me.md"); } catch {}
+    return names.map((n) => {
+      const path = join(dir, n);
+      let raw = "", mtime = 0;
+      try { raw = readFileSync(path, "utf8"); mtime = statSync(path).mtimeMs; } catch {}
+      const body = raw.replace(/^---\n[\s\S]*?\n---\n?/, "").trim();
+      return { note: `Revoada/${n}`, body, mtime, words: new Set(tokens(body)), same: hashOf(norm(body).replace(/\s+/g, " ")) };
+    });
+  }
+  function tidy() {
+    const notes = ownNotes(), now = Date.now();
+    const empty = notes.filter((n) => n.body.length < 40).map((n) => n.note);
+    const rest = notes.filter((n) => n.body.length >= 40);
+    // cópias idênticas: fica a mais recente
+    const groups = new Map<string, typeof rest>();
+    for (const n of rest) groups.set(n.same, [...(groups.get(n.same) || []), n]);
+    const copies = [...groups.values()].filter((g) => g.length > 1).map((g) => { const sorted = [...g].sort((a, b) => b.mtime - a.mtime); return { keep: sorted[0].note, drop: sorted.slice(1).map((n) => n.note) }; });
+    const dropped = new Set(copies.flatMap((c) => c.drop));
+    // parecidas: mesmo assunto escrito duas vezes; juntar exige ler, então fica como sugestão
+    const similar: { a: string; b: string; score: number }[] = [];
+    const cand = rest.filter((n) => !dropped.has(n.note) && n.words.size >= 8);
+    for (let i = 0; i < cand.length; i++) for (let j = i + 1; j < cand.length; j++) {
+      if (cand[i].same === cand[j].same) continue;
+      let both = 0;
+      for (const w of cand[i].words) if (cand[j].words.has(w)) both++;
+      const score = both / (cand[i].words.size + cand[j].words.size - both);
+      if (score >= SIMILAR) similar.push({ a: cand[i].note, b: cand[j].note, score: Math.round(score * 100) / 100 });
+    }
+    similar.sort((x, y) => y.score - x.score);
+    const stale = rest.filter((n) => !dropped.has(n.note) && now - n.mtime > STALE_MS).map((n) => ({ note: n.note, days: Math.floor((now - n.mtime) / 86_400_000) }));
+    return { total: notes.length, empty, copies, similar: similar.slice(0, 30), stale };
+  }
+  function archive(note: string) {
+    if (!/^Revoada\/[^/]+\.md$/.test(note) || note === "Revoada/Leia-me.md") throw new Error("só notas próprias (Revoada/) podem ser arquivadas");
+    const from = join(vault, note);
+    if (!existsSync(from)) throw new Error("a nota não existe mais");
+    const dir = join(vault, "Revoada", "Arquivo");
+    mkdirSync(dir, { recursive: true });
+    let to = join(dir, basename(note));
+    if (existsSync(to)) to = join(dir, `${basename(note, ".md")}-${Date.now().toString(36)}.md`);
+    renameSync(from, to);
+    return relative(vault, to);
+  }
+  // o que dá pra fazer sem ler: tirar do caminho nota vazia e cópia idêntica
+  function autoTidy() {
+    const t = tidy(), moved: string[] = [];
+    for (const note of [...t.empty, ...t.copies.flatMap((c) => c.drop)]) { try { archive(note); moved.push(note); } catch {} }
+    if (moved.length) { index(); embedPending(); }
+    return moved;
+  }
+
   function blockedNotes() {
     const seen = new Map<string, string>(skipped.map((s) => [s.note, s.why]));
     for (const s of sections) if (s.blocked && !seen.has(s.note)) seen.set(s.note, s.blocked);
@@ -367,7 +426,8 @@ export function createBrain(opts: { home: string; vault: string; projects: strin
   }
 
   return {
-    vault, sync, search, context, addNote, blockedNotes, setRules, enableSemantic, probe,
+    vault, sync, search, context, addNote, blockedNotes, setRules, enableSemantic, probe, tidy, autoTidy,
+    archive(note: string) { const to = archive(note); index(); embedPending(); return to; },
     info: () => {
       const blocked: Record<string, number> = {};
       for (const b of blockedNotes()) blocked[b.why] = (blocked[b.why] || 0) + 1;

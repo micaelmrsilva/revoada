@@ -20,7 +20,7 @@ export async function sobe(port: number) {
 
   const server = Bun.spawn(["bun", "server.ts"], {
     cwd: ROOT, stdout: "ignore", stderr: "inherit",
-    env: { ...process.env, HOME: home, REVOADA_HOME: join(home, ".revoada"), REVOADA_VAULT: join(home, "cofre"), PORT: String(port), PATH: `${join(ROOT, "tests/stubs")}:${process.env.PATH}`, GEMINI_API_KEY: "", OLLAMA_HOST: "http://127.0.0.1:1" },
+    env: { ...process.env, HOME: home, REVOADA_HOME: join(home, ".revoada"), REVOADA_VAULT: join(home, "cofre"), PORT: String(port), PATH: `${join(ROOT, "tests/stubs")}:${process.env.PATH}`, GEMINI_API_KEY: "", OLLAMA_HOST: "http://127.0.0.1:1", REVOADA_ASSETS: "", REVOADA_PROJECTS: "", REVOADA_REMOTE_PORT: "" },
   });
   async function api(path: string, method = "GET", body?: unknown) {
     const r = await fetch(`${origin}/api/${path}`, { method, headers: { origin, ...(body ? { "content-type": "application/json" } : {}) }, body: body ? JSON.stringify(body) : undefined });

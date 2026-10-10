@@ -4,7 +4,7 @@
 import { writeFileSync } from "fs";
 const a = process.argv.slice(2), out = (o: unknown) => console.log(JSON.stringify(o));
 if (a[0] === "auth") { out({ loggedIn: true, email: "teste@exemplo.dev", subscriptionType: "max", orgName: "teste@exemplo.dev" }); process.exit(0); }
-if (a.includes("--model")) { console.log("Título de teste"); process.exit(0); }
+if (a.includes("--model")) { console.log(a[1].includes("próxima mensagem") ? "roda os testes agora" : "Título de teste"); process.exit(0); }
 const lines = console[Symbol.asyncIterator]();
 const first = JSON.parse((await lines.next()).value);
 const blocks: any[] = first.message.content;
@@ -47,8 +47,11 @@ if (a.includes("--permission-prompt-tool")) {
   if (answer.behavior === "allow") writeFileSync("feito.txt", "ok");
   out({ type: "user", message: { content: [{ type: "tool_result", tool_use_id: "tu1", content: answer.behavior === "allow" ? "" : "negado", is_error: answer.behavior !== "allow" }] } });
   out({ type: "assistant", message: { id: "m2", content: [{ type: "text", text: answer.behavior === "allow" ? "permitido" : "negado" }] } });
+} else if (said.includes("Você é o supervisor de uma equipe")) {
+  // planejador do supervisor: duas tarefas independentes, no formato pedido
+  out({ type: "assistant", message: { id: "p1", content: [{ type: "text", text: "Dá para separar em duas frentes que não se tocam.\n\n```json\n" + JSON.stringify({ tarefas: [{ titulo: "Exportação de pedidos", pedido: "CRIA-ARQUIVO da exportação de pedidos" }, { titulo: "Importação de clientes", pedido: "CRIA-ARQUIVO da importação de clientes" }] }) + "\n```" }] } });
 } else if (RICH) {
-  out({ type: "assistant", message: { id: "d1", content: [{ type: "tool_use", id: "dt1", name: "Bash", input: { command: LONG } }] } });
+  out({ type: "assistant", message: { id: "d1", content: [{ type: "tool_use", id: "dt1", name: "Bash", input: { command: LONG, description: "Confere o andamento da criação da rodada r9" } }] } });
   await nap(120);
   out({ type: "user", message: { content: [{ type: "tool_result", tool_use_id: "dt1", content: "14:42\noka: 300/500" }] } });
   out({ type: "assistant", message: { id: "d2", content: [{ type: "tool_use", id: "dt2", name: "Read", input: { file_path: "ops/disparo/log.txt" } }] } });
@@ -59,7 +62,7 @@ if (a.includes("--permission-prompt-tool")) {
 } else {
   out({ type: "stream_event", event: { type: "message_start", message: { id: "m1" } } });
   for (const t of ["olá ", "mundo"]) out({ type: "stream_event", event: { type: "content_block_delta", index: 0, delta: { type: "text_delta", text: t } } });
-  out({ type: "assistant", message: { id: "m1", content: [{ type: "text", text: `olá mundo; imagens=${blocks.filter((b) => b.type === "image").length}; retomada=${a.includes("--resume")}; revisor=${said.includes("<diff>") && said.includes("novo.txt")}; leitura=${!a.includes("--permission-mode") && !a.includes("--dangerously-skip-permissions")}` }] } });
+  out({ type: "assistant", message: { id: "m1", content: [{ type: "text", text: `olá mundo; imagens=${blocks.filter((b) => b.type === "image").length}; retomada=${a.includes("--resume")}; revisor=${said.includes("<diff>") && said.includes("novo.txt")}; leitura=${!a.includes("--permission-mode") && !a.includes("--dangerously-skip-permissions")}; auditoria=${said.includes("auditor de segurança")}; mcp=${a.includes("--mcp-config") ? a[a.indexOf("--mcp-config") + 1] : "nao"}` }] } });
 }
 out({ type: "result", subtype: "success", is_error: false, session_id: "s-claude", total_cost_usd: 0.05, usage: { input_tokens: 100, cache_creation_input_tokens: 20, cache_read_input_tokens: 3000, output_tokens: 40 } });
 process.exit(0);

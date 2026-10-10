@@ -21,7 +21,7 @@ export type Tokens = { in: number; out: number; cache: number; usd?: number };
 export type Item =
   | { k: string; kind: "text"; text: string }
   | { k: string; kind: "think"; text: string }
-  | { k: string; kind: "cmd"; command: string; output: string; exit: number | null; status: string }
+  | { k: string; kind: "cmd"; command: string; output: string; exit: number | null; status: string; desc?: string }
   | { k: string; kind: "files"; changes: { path: string; kind: string }[]; status: string }
   | { k: string; kind: "tool"; name: string; detail: string; output: string; status: string }
   | { k: string; kind: "todo"; items: { text: string; done: boolean }[] }
@@ -31,7 +31,10 @@ export type Msg = {
   role: "user" | "assistant"; at: number; text?: string; items?: Item[]; accountId?: string; attachments?: Attachment[];
   state?: "working" | "done" | "error" | "stopped"; error?: string; endedAt?: number; brain?: string[];
   tokens?: Tokens;
+  // tamanho, em caracteres, do que a Revoada pôs neste pedido: é a parte do gasto que ela controla
+  sent?: { ask: number; brain: number; handoff: number; resumed: boolean };
   review?: boolean;    // resposta de outra conta revisando o trabalho desta conversa
+  reviewKind?: "security";
 };
 // mensagem escrita enquanto o agente respondia: entra sozinha quando ele terminar
 export type Queued = { text: string; at: number; target?: string; mode?: Mode; brain?: boolean; attachments?: Attachment[] };
@@ -40,6 +43,7 @@ export type Convo = {
   accountId: string | null; provider: string; native: { accountId: string; sessionId: string } | null;
   messages: Msg[]; working: boolean; at: number; rev: number;
   queue?: Queued[];
+  suggest?: string;    // próxima mensagem provável, oferecida no campo quando o agente termina
   waiting?: boolean;   // parado esperando o usuário permitir ou negar algo
   allow?: string[];    // ferramentas que o usuário mandou permitir sempre nesta conversa
   titled?: boolean;    // já tem título de verdade (gerado ou digitado)
@@ -57,7 +61,8 @@ type Sink = {
   ask: (req: string, tool: string, input: any) => void;
   tokens: (t: Tokens) => void;
 };
-type RunOpts = { prompt: string; ctx?: string; resume: string | null; mode: Mode; dirs: string[]; files: Attachment[] };
+// extra: argumentos que o servidor acrescenta à execução (hoje, os servidores MCP compartilhados)
+type RunOpts = { prompt: string; ctx?: string; resume: string | null; mode: Mode; dirs: string[]; files: Attachment[]; extra: string[] };
 type Adapter = {
   args: (o: RunOpts) => string[];
   // CLI que conversa pela entrada padrão: o pedido vai por aqui e as permissões voltam por aqui
@@ -75,13 +80,13 @@ const withFiles = (prompt: string, files: Attachment[]) => (files.length ? `${pr
 const CODEX_SANDBOX = { read: "read-only", ask: "workspace-write", edit: "workspace-write", full: "danger-full-access" };
 const ADAPTERS: Record<string, Adapter> = {
   codex: {
-    args: ({ prompt, ctx, resume, mode, dirs, files }) => {
+    args: ({ prompt, ctx, resume, mode, dirs, files, extra }) => {
       const images = files.filter((f) => f.image), rest = files.filter((f) => !f.image);
       const text = withFiles(resume ? prompt : inline(prompt, ctx), rest);
       // o pedido vai antes das imagens: a flag -i aceita vários valores e engoliria o texto
       return resume
-        ? ["exec", "resume", resume, "--json", "--skip-git-repo-check", "-c", `sandbox_mode="${CODEX_SANDBOX[mode]}"`, text, ...images.flatMap((f) => ["-i", f.path])]
-        : ["exec", "--json", "--skip-git-repo-check", "-s", CODEX_SANDBOX[mode], ...dirs.flatMap((d) => ["--add-dir", d]), text, ...images.flatMap((f) => ["-i", f.path])];
+        ? ["exec", "resume", resume, "--json", ...extra, "--skip-git-repo-check", "-c", `sandbox_mode="${CODEX_SANDBOX[mode]}"`, text, ...images.flatMap((f) => ["-i", f.path])]
+        : ["exec", "--json", ...extra, "--skip-git-repo-check", "-s", CODEX_SANDBOX[mode], ...dirs.flatMap((d) => ["--add-dir", d]), text, ...images.flatMap((f) => ["-i", f.path])];
     },
     parse(ev, s) {
       if (ev.type === "thread.started") return s.session(ev.thread_id);
@@ -106,7 +111,7 @@ const ADAPTERS: Record<string, Adapter> = {
   },
   claude: {
     canAsk: true,
-    args: ({ ctx, resume, mode, dirs }) => ["-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose", "--include-partial-messages",
+    args: ({ ctx, resume, mode, dirs, extra }) => ["-p", ...extra, "--input-format", "stream-json", "--output-format", "stream-json", "--verbose", "--include-partial-messages",
       ...(resume ? ["--resume", resume] : []), ...(ctx ? ["--append-system-prompt", ctx] : []),
       ...(mode === "ask" ? ["--permission-prompt-tool", "stdio"] : mode === "edit" ? ["--permission-mode", "acceptEdits"] : mode === "full" ? ["--dangerously-skip-permissions"] : []),
       "--add-dir", ...dirs], // variádica: fica por último
@@ -154,7 +159,7 @@ const ADAPTERS: Record<string, Adapter> = {
           else if (b.type === "thinking") { if (b.thinking) s.up(key, { kind: "think", text: b.thinking }); }
           else if (b.type === "tool_use") {
             const inp = b.input || {};
-            if (b.name === "Bash") s.up(b.id, { kind: "cmd", command: inp.command || "", output: "", exit: null, status: "in_progress" });
+            if (b.name === "Bash") s.up(b.id, { kind: "cmd", command: inp.command || "", output: "", exit: null, status: "in_progress", ...(typeof inp.description === "string" && inp.description.trim() ? { desc: clip(inp.description.trim(), 200) } : {}) }); // desc: o que o próprio agente diz que o comando faz
             else if (["Edit", "Write", "MultiEdit", "NotebookEdit"].includes(b.name)) s.up(b.id, { kind: "files", changes: [{ path: inp.file_path || inp.notebook_path || "", kind: b.name === "Write" ? "add" : "update" }], status: "in_progress" });
             else if (b.name === "TodoWrite") s.up(b.id, { kind: "todo", items: (inp.todos || []).map((t: any) => ({ text: t.content, done: t.status === "completed" })) });
             else s.up(b.id, { kind: "tool", name: b.name, detail: clip(inp.file_path || inp.pattern || inp.query || inp.url || inp.description || inp, 400), output: "", status: "in_progress" });
@@ -209,8 +214,11 @@ export function createConvos(d: {
   makeTitle: (c: Convo) => Promise<string | null>;
   // resposta pronta: o servidor decide se pede revisão sozinho
   afterDone?: (c: Convo, msg: Msg) => void;
+  // próxima mensagem provável do usuário, pra oferecer no campo (null = sem sugestão)
+  suggest?: (c: Convo) => Promise<string | null>;
   // no modo "perguntar": ação que pode seguir sem passar pelo usuário (só leitura)
   autoAllow?: (tool: string, input: any) => boolean;
+  extraArgs?: (a: Acc) => string[];
 }) {
   mkdirSync(d.dir, { recursive: true });
   const convos = new Map<string, Convo>();
@@ -278,7 +286,7 @@ export function createConvos(d: {
     // o agente que não sabe perguntar roda como "pode editar", e a conversa avisa
     const mode: Mode = force || (c.mode === "ask" && !adapter.canAsk ? "edit" : c.mode);
     if (!force && c.mode === "ask" && !adapter.canAsk && attempt === 0) items.push({ k: `note:ask:${items.length}`, kind: "note", text: "Este agente não pede permissão passo a passo. Rodando como \"pode editar\": mexe só na pasta de trabalho.", tone: "mute" });
-    const opts: RunOpts = { prompt, ctx, resume, mode, dirs: [d.vault, ...(files.length ? [d.attachDir] : [])], files };
+    const opts: RunOpts = { prompt, ctx, resume, mode, dirs: [d.vault, ...(files.length ? [d.attachDir] : [])], files, extra: d.extraArgs?.(acc) || [] };
     const proc = Bun.spawn([bin, ...adapter.args(opts)], {
       cwd: c.cwd, env: { ...d.envFor(acc), TERM: "dumb", NO_COLOR: "1" }, stdin: adapter.stdin ? "pipe" : "ignore", stdout: "pipe", stderr: "pipe",
     });
@@ -401,7 +409,8 @@ export function createConvos(d: {
           msg.brain = b?.notes;
           const history = handoff(c, userIndex, msg, why);
           if (history) prompt = `${history}\n${userText}`;
-        }
+          msg.sent = { ask: userText.length, brain: ctx?.length || 0, handoff: history?.length || 0, resumed: false };
+        } else msg.sent = { ask: userText.length, brain: 0, handoff: 0, resumed: true };
         c.accountId = acc.id;
         c.provider = acc.provider;
         touch(c);
@@ -438,7 +447,10 @@ export function createConvos(d: {
     const next = msg.state !== "error" ? c.queue?.shift() : undefined;
     if (c.queue && !c.queue.length) delete c.queue;
     if (next) { const { text, at: _at, ...patch } = next; send(c, text, patch); }
-    else if (msg.state === "done") d.afterDone?.(c, msg);
+    else if (msg.state === "done") {
+      d.afterDone?.(c, msg);
+      d.suggest?.(c).then((s) => { if (s && convos.has(c.id) && !c.working && c.messages.at(-1) === msg) { c.suggest = s; touch(c); } }).catch(() => {});
+    }
     // primeira resposta pronta: troca a primeira linha do pedido por um título de verdade
     if (!c.titled && msg.state === "done") {
       c.titled = true;
@@ -448,27 +460,41 @@ export function createConvos(d: {
 
   // Revisão cruzada: outra conta lê o que mudou nesta conversa, em modo só leitura, numa sessão
   // própria. A sessão nativa e a conta do autor não são tocadas; a resposta entra marcada como revisão.
-  function review(c: Convo, o: { acc: Acc; patch: string; files: string[]; truncated: boolean }) {
+  function review(c: Convo, o: { acc: Acc; patch: string; files: string[]; truncated: boolean; kind?: "security" }) {
     if (c.working) throw new Error("o agente ainda está respondendo");
+    delete c.suggest;
     const asked = c.messages.filter((m) => m.role === "user").map((m) => clip(m.text, 1500)).join("\n---\n");
     const author = d.accName(d.account(c.accountId));
-    const prompt = `Você é o revisor. Outro agente (${author}) fez o trabalho abaixo nesta pasta. Revise sem editar nada: você está em modo só leitura.
+    const changed = o.patch.trim()
+      ? `Arquivos mexidos:\n${o.files.map((f) => `- ${f}`).join("\n") || "- (nenhum listado)"}\n\n<diff>\n${o.patch}\n</diff>${o.truncated ? "\n[o diff foi cortado por tamanho: abra os arquivos listados para ver o resto]" : ""}`
+      : "Não há mudança pendente nesta pasta: o alvo é o projeto inteiro, como está.";
+    const prompt = o.kind === "security"
+      ? `Você é o auditor de segurança. Trabalhe em modo só leitura: não edite nada.
+
+<pedido-do-usuario>
+${clip(asked, 4000)}
+</pedido-do-usuario>
+
+${changed}
+
+Faça a auditoria em três passos, nesta ordem.
+1. Mapa: por onde entra dado de fora (rede, arquivo, argumento, variável de ambiente, entrada do usuário, texto vindo de modelo) e onde esse dado chega (shell, SQL, sistema de arquivos, HTML, outra rede, chave ou segredo). Com diff, comece pelo que ele toca e siga as chamadas para fora dele.
+2. Caça, em cada caminho do mapa: injeção (comando, SQL, HTML, caminho de arquivo), falta de autenticação ou de checagem de dono, segredo em código ou em log, requisição para endereço controlado por terceiro, desserialização e eval, criptografia fraca ou caseira, condição de corrida em arquivo ou saldo, e padrão inseguro (porta aberta, CORS livre, permissão larga).
+3. Prova: antes de listar um achado, releia o código e confirme que o caminho existe de ponta a ponta. Descarte o que depender de algo que o código já impede.
+
+Responda em português, com uma lista numerada do mais grave para o menos. Cada item: gravidade (crítica, alta, média, baixa), arquivo e linha, como alguém explora na prática e o conserto em uma frase. Não liste boa prática genérica nem achado que você não confirmou. Se não houver nada explorável, responda "Nada a corrigir." e uma linha dizendo o que conferiu.`
+      : `Você é o revisor. Outro agente (${author}) fez o trabalho abaixo nesta pasta. Revise sem editar nada: você está em modo só leitura.
 
 <pedido-do-usuario>
 ${clip(asked, 6000)}
 </pedido-do-usuario>
 
-Arquivos mexidos:
-${o.files.map((f) => `- ${f}`).join("\n") || "- (nenhum listado)"}
-
-<diff>
-${o.patch}
-</diff>${o.truncated ? "\n[o diff foi cortado por tamanho: abra os arquivos listados para ver o resto]" : ""}
+${changed}
 
 Procure, nesta ordem: (1) defeito real: erro de lógica, caso não tratado, regressão, falha de segurança, dado perdido; (2) o que foi pedido e não foi feito, ou foi feito diferente do pedido; (3) o que foi feito sem ter sido pedido. Abra os arquivos em volta quando o diff não bastar. Não comente estilo nem gosto, e não proponha refatoração.
 
 Responda em português, com uma lista numerada do mais grave para o menos. Cada item: arquivo e linha, o que quebra e em que situação. Se não achar nada que mereça correção, responda "Nada a corrigir." e uma linha dizendo o que conferiu.`;
-    const msg: Msg = { role: "assistant", at: Date.now(), items: [], state: "working", accountId: o.acc.id, review: true };
+    const msg: Msg = { role: "assistant", at: Date.now(), items: [], state: "working", accountId: o.acc.id, review: true, ...(o.kind ? { reviewKind: o.kind } : {}) };
     c.messages.push(msg);
     c.working = true;
     touch(c);
@@ -494,6 +520,7 @@ Responda em português, com uma lista numerada do mais grave para o menos. Cada 
       touch(c);
       return "queued" as const;
     }
+    delete c.suggest;
     if (patch.target) c.target = patch.target;
     if (patch.mode) c.mode = patch.mode;
     if (typeof patch.brain === "boolean") c.brain = patch.brain;

@@ -7,7 +7,10 @@ import { createBrain } from "./brain";
 import { createClones } from "./clones";
 import { createConvos, type Attachment, type Mode, type Usage } from "./convos";
 import { createHistory } from "./history";
+import { createMissions, PLAN_PROMPT } from "./missions";
 import { createRemote } from "./remote";
+import { createSchedules } from "./schedule";
+import { createTools } from "./tools";
 import { readOnlyTool } from "./safe";
 
 const HOME = homedir();
@@ -150,6 +153,9 @@ function envFor(acc: Account): Record<string, string> {
   for (const [k, v] of Object.entries(process.env)) {
     // não vazar o contexto de uma sessão Claude Code que tenha lançado o servidor
     if (v == null || k === "CLAUDECODE" || k.startsWith("CLAUDE_CODE_")) continue;
+    // nem o que é só deste servidor: um agente que suba outra Revoada (ou rode os testes dela)
+    // herdaria a pasta de dados, a página instalada e a porta desta
+    if (k.startsWith("REVOADA_") || k === "PORT") continue;
     env[k] = v;
   }
   env.PATH = ENV_PATH;
@@ -188,7 +194,7 @@ const stripAnsi = (s: string) => s
 // ---------- limite e rodízio ----------
 type Limit = { until: number; reason: string; at: number };
 let limits: Record<string, Limit> = readJson(LIMITS_FILE) || {};
-const settings: { rotate: boolean; teach: boolean; onboarded: boolean; autoClean: boolean; importChats: boolean; keepAwake: boolean; lidAwake: boolean; lidFreeze: boolean; autoReview: boolean; autoRead: boolean; remote: boolean; remoteSend: boolean } = { autoRead: true, rotate: true, teach: false, onboarded: false, autoClean: false, importChats: false, keepAwake: true, lidAwake: false, lidFreeze: false, autoReview: false, remote: false, remoteSend: false, ...(readJson(SETTINGS_FILE) || {}) };
+const settings: { rotate: boolean; teach: boolean; onboarded: boolean; autoClean: boolean; importChats: boolean; keepAwake: boolean; lidAwake: boolean; lidFreeze: boolean; autoReview: boolean; autoRead: boolean; suggest: boolean; shareTools: boolean; tidyBrain: boolean; remote: boolean; remoteSend: boolean } = { autoRead: true, suggest: true, shareTools: false, tidyBrain: false, rotate: true, teach: false, onboarded: false, autoClean: false, importChats: false, keepAwake: true, lidAwake: false, lidFreeze: false, autoReview: false, remote: false, remoteSend: false, ...(readJson(SETTINGS_FILE) || {}) };
 // o que a janela nativa informa sobre a vigília (só existe no app desktop)
 let vigil: Record<string, unknown> | null = null;
 // consumo de cada conta nas janelas do provedor (5h, 7 dias), lido do que o próprio CLI informa
@@ -260,6 +266,19 @@ function saveAccounts() {
 }
 saveAccounts();
 const account = (id: string) => accounts.find((a) => a.id === id);
+
+// ---------- skills e MCP em todas as contas ----------
+const tools = createTools({ home: HOME, root: ROOT });
+const extraArgs = (acc: { id: string; provider: string; home: string | null }) => (settings.shareTools ? tools.mcpArgs(acc) : []);
+function shareTools(on: boolean) {
+  const out = { linked: 0, removed: 0 };
+  for (const a of accounts) {
+    if (!a.home) continue;
+    try { if (on) { const r = tools.syncSkills(a); out.linked += r.linked; out.removed += r.removed; } else out.removed += tools.unlinkSkills(a); }
+    catch (e) { console.error(`skills: ${a.id}:`, e); }
+  }
+  return out;
+}
 
 const settingsEarly: { vault?: string } = readJson(join(ROOT, "settings.json")) || {};
 const brain = createBrain({
@@ -406,7 +425,7 @@ function startSession(acc: Account, kind: "chat" | "login", cwd: string, o: Sess
     title: o.title || (kind === "login" ? "Login" : "Sessão"), brain: o.brain || [], lastOut: Date.now(),
   };
   lastUsed[acc.id] = Date.now();
-  s.proc = Bun.spawn([bin, ...(kind === "login" ? PROVIDERS[acc.provider].login : PROVIDERS[acc.provider].chat(o.prompt || "", o.ctx)), ...(kind === "chat" ? PROVIDERS[acc.provider].dir(brain.vault) : [])], {
+  s.proc = Bun.spawn([bin, ...(kind === "login" ? PROVIDERS[acc.provider].login : PROVIDERS[acc.provider].chat(o.prompt || "", o.ctx)), ...(kind === "chat" ? [...extraArgs(acc), ...PROVIDERS[acc.provider].dir(brain.vault)] : [])], {
     cwd, env: envFor(acc),
     terminal: { cols: o.cols || 100, rows: o.rows || 30, data: (_t: unknown, data: Uint8Array) => pushOutput(s, data) },
   });
@@ -496,24 +515,25 @@ function pickReviewer(c: { provider: string; accountId: string | null }, target?
   for (const p of ["codex", "claude", "gemini", "grok"]) { if (p === c.provider) continue; const a = pickAccount(p, []); if (a) return a; }
   return pickAccount(c.provider, c.accountId ? [c.accountId] : []) || pickAccount(c.provider, []);
 }
-async function startReview(c: NonNullable<ReturnType<typeof convos.get>>, target?: string) {
+async function startReview(c: NonNullable<ReturnType<typeof convos.get>>, target?: string, kind?: "security") {
   if (c.working) throw new Error("o agente ainda está respondendo");
-  const d = await workDiff(c.cwd, c.worktree?.main);
+  // a auditoria de segurança não precisa de diff: sem mudança (ou sem git) o alvo é o projeto como está
+  const d = (await workDiff(c.cwd, c.worktree?.main)) || (kind ? { files: [] as string[], commits: [] as string[], patch: "" } : null);
   if (!d) throw new Error("esta pasta não é um repositório git; não há mudança para revisar");
   // arquivo novo ainda fora do git não aparece no diff: entra como arquivo inteiro
   let patch = d.patch;
-  const fresh = (await git(c.cwd, "ls-files", "--others", "--exclude-standard")).out.split("\n").filter(Boolean);
+  const fresh = (await repoInfo(c.cwd)) ? (await git(c.cwd, "ls-files", "--others", "--exclude-standard")).out.split("\n").filter(Boolean) : [];
   for (const f of fresh.slice(0, REVIEW_NEW_FILES)) {
     if (patch.length > REVIEW_PATCH_CHARS) break;
     try { if (statSync(join(c.cwd, f)).size > 40_000) continue; } catch { continue; }
     patch += "\n" + (await git(c.cwd, "diff", "--no-index", "--", "/dev/null", f)).out;
   }
-  if (!patch.trim()) throw new Error("nada mudou nos arquivos desta conversa; não há o que revisar");
+  if (!patch.trim() && !kind) throw new Error("nada mudou nos arquivos desta conversa; não há o que revisar");
   await Promise.all(accounts.filter((a) => !statusCache.has(a.id)).map(refreshStatus));
   const acc = pickReviewer(c, target);
   if (!acc) throw new Error("nenhuma conta pronta para revisar");
   lastUsed[acc.id] = Date.now();
-  convos.review(c, { acc, patch: patch.slice(0, REVIEW_PATCH_CHARS), files: [...d.files.map((f) => f.slice(3)), ...d.commits.map((x) => `commit ${x}`)], truncated: patch.length > REVIEW_PATCH_CHARS });
+  convos.review(c, { acc, patch: patch.slice(0, REVIEW_PATCH_CHARS), files: [...d.files.map((f) => f.slice(3)), ...d.commits.map((x) => `commit ${x}`)], truncated: patch.length > REVIEW_PATCH_CHARS, kind });
   return acc;
 }
 
@@ -536,11 +556,29 @@ async function makeTitle(c: { messages: any[] }): Promise<string | null> {
   const title = out.split("\n").pop()!.replace(/^["'“]|["'”.]$/g, "").trim();
   return (await proc.exited) === 0 && title && title.length <= 70 ? title : null;
 }
+// Próxima mensagem provável, no modelo mais barato do Claude. É o que o campo oferece quando o agente
+// termina: Tab aceita, Enter manda. Sem conta Claude pronta, não há sugestão.
+async function makeSuggestion(c: { messages: any[] }): Promise<string | null> {
+  if (!settings.suggest) return null;
+  const acc = pickAccount("claude", []), bin = binPath("claude");
+  if (!acc || !bin) return null;
+  const last = c.messages.at(-1), ask = [...c.messages].reverse().find((m) => m.role === "user");
+  const said = (last?.items || []).filter((i: any) => i.kind === "text").map((i: any) => i.text).join("\n").slice(-1500);
+  if (!said.trim()) return null;
+  const proc = Bun.spawn([bin, "-p", `Abaixo está o fim de uma conversa entre um usuário e um agente de código. Escreva a próxima mensagem que o usuário mais provavelmente mandaria agora: uma linha só, no máximo 12 palavras, na voz dele (direta, informal, em português), específica ao que acabou de acontecer. Se a resposta terminou com uma pergunta ou uma oferta, responda a ela. Sem aspas e sem ponto final. Se não houver um próximo passo óbvio, responda só com um traço: -\n\nÚltimo pedido do usuário: ${String(ask?.text || "").slice(0, 500)}\n\nFim da resposta do agente:\n${said}`, "--model", "haiku"], { cwd: TITLES, env: envFor(acc), stdin: "ignore", stdout: "pipe", stderr: "ignore" });
+  const timer = setTimeout(() => proc.kill(), 45_000);
+  const out = (await new Response(proc.stdout).text()).trim();
+  clearTimeout(timer);
+  const line = (out.split("\n").pop() || "").replace(/^["'“]|["'”.]$/g, "").trim();
+  return (await proc.exited) === 0 && line.length > 2 && line.length <= 120 && !/^[-–—]+$/.test(line) ? line : null;
+}
 const convos = createConvos({
   dir: join(ROOT, "convos"), vault: brain.vault, attachDir: ATTACH,
   onUsage: (a, w) => setUsage(a.id, w),
   afterTurn: (a, sid) => { if (a.provider === "codex") readCodexUsage(a as Account, sid); },
   makeTitle,
+  suggest: makeSuggestion,
+  extraArgs,
   account: (id) => (id ? account(id) : undefined),
   accName,
   binPath,
@@ -586,6 +624,53 @@ function applyRemote() {
   try { settings.remote ? remote.start() : remote.stop(); }
   catch (e: any) { settings.remote = false; throw new Error(`não consegui abrir a porta ${REMOTE_PORT}: ${e?.message || e}`); }
 }
+
+// ---------- pedidos agendados ----------
+const isTarget = (t: unknown): t is string => typeof t === "string" && (t.startsWith("pool:") ? !!PROVIDERS[t.slice(5)] : !!account(t));
+async function openChat(o: { prompt: string; target: string; cwd: string; mode: Mode; brain: boolean; isolate: boolean; title?: string }) {
+  const cwd = validCwd(o.cwd);
+  if (!cwd) throw new Error("a pasta deste pedido não existe mais");
+  if (!isTarget(o.target)) throw new Error("a conta deste pedido não existe mais");
+  await Promise.all(accounts.filter((a) => !statusCache.has(a.id)).map(refreshStatus));
+  const wt = o.isolate ? await makeWorktree(cwd, o.title || o.prompt) : undefined;
+  const c = convos.create({ prompt: o.prompt, target: o.target, cwd: wt?.cwd || cwd, mode: o.mode, brain: o.brain, worktree: wt && { main: wt.main, path: wt.path, branch: wt.branch } });
+  if (o.title) convos.rename(c.id, o.title);
+  return c;
+}
+const schedules = createSchedules({
+  file: join(ROOT, "schedules.json"),
+  run: async (s) => (await openChat({ prompt: s.prompt, target: s.target, cwd: s.cwd, mode: asMode(s.mode), brain: s.brain, isolate: s.isolate })).id,
+});
+
+// ---------- supervisor ----------
+const missions = createMissions({
+  file: join(ROOT, "missions.json"),
+  plan: (m) => {
+    const c = convos.create({ prompt: PLAN_PROMPT(m.prompt), target: m.planner, cwd: m.cwd, mode: "read", brain: true });
+    convos.rename(c.id, `Plano: ${m.prompt.split("\n")[0].slice(0, 60)}`);
+    return c.id;
+  },
+  launch: async (m, t, worker) => {
+    const c = await openChat({ prompt: `${t.prompt}\n\nQuando terminar, faça commit de todo o trabalho neste branch (sem push).`, target: worker, cwd: m.cwd, mode: "edit", brain: true, isolate: true, title: t.title });
+    return { convo: c.id, branch: c.worktree?.branch };
+  },
+  convo: (id) => {
+    const c = convos.get(id);
+    if (!c) return null;
+    const last = c.messages.at(-1);
+    return {
+      working: c.working, lastState: last?.state, error: last?.error, branch: c.worktree?.branch,
+      text: (last?.items || []).filter((i) => i.kind === "text").map((i: any) => i.text).join("\n"),
+      touchedFiles: c.messages.some((x) => !x.review && x.items?.some((i) => i.kind === "files")),
+    };
+  },
+  // a revisão automática dos ajustes pode ter chegado antes: uma revisão por tarefa basta
+  review: async (id) => { const c = convos.get(id); if (c && !c.working && !c.messages.some((x) => x.review)) await startReview(c); },
+  merge: async (m, branches) => (await openChat({
+    prompt: `Junte neste branch o trabalho dos branches abaixo, um por vez, com git merge. Resolva os conflitos preservando a intenção de cada tarefa, rode os testes do projeto e conserte o que a junção quebrar. No fim, faça commit e diga o que entrou e o que ficou pendente.\n\nPedido original:\n${m.prompt}\n\nBranches:\n${branches.map((b) => `- ${b.branch} (${b.title})`).join("\n")}`,
+    target: m.planner, cwd: m.cwd, mode: "edit", brain: true, isolate: true, title: `Juntar: ${m.prompt.split("\n")[0].slice(0, 50)}`,
+  })).id,
+});
 
 // ---------- cópias de repositório deixadas pelos agentes ----------
 const clones = createClones({
@@ -639,7 +724,7 @@ function launch(run: Run, job: Job) {
   job.accountId = acc.id;
   job.tried.push(acc.id);
   lastUsed[acc.id] = Date.now();
-  const proc = Bun.spawn([bin, ...PROVIDERS[acc.provider].headless(run.prompt, run.edits, run.ctx), ...PROVIDERS[acc.provider].dir(brain.vault)], {
+  const proc = Bun.spawn([bin, ...PROVIDERS[acc.provider].headless(run.prompt, run.edits, run.ctx), ...extraArgs(acc), ...PROVIDERS[acc.provider].dir(brain.vault)], {
     cwd: job.cwd || run.cwd, env: { ...envFor(acc), TERM: "dumb", NO_COLOR: "1" }, stdin: "ignore", stdout: "pipe", stderr: "pipe",
   });
   job.proc = proc;
@@ -731,6 +816,8 @@ async function state(refresh: boolean) {
     runs: runs.map((r) => ({ id: r.id, title: r.prompt, cwd: r.cwd, at: r.at, running: r.jobs.some((j) => j.state === "rodando"), jobs: r.jobs.length })),
     brain: brain.info(),
     clones: clones.summary(), cleaned, vigil, remote: { on: remote.on, port: REMOTE_PORT },
+    schedules: schedules.list().length,
+    missions: missions.list().map((m) => ({ id: m.id, title: m.prompt.split("\n")[0].slice(0, 80), cwd: m.cwd, at: m.at, state: m.state })),
     convos: convos.list(),
     history: settings.importChats ? history.list() : [],
   };
@@ -865,7 +952,7 @@ const server = Bun.serve({
       }
       if (req.method === "POST" && action === "stop") { convos.stop(c.id); return json({ ok: true }); }
       if (req.method === "POST" && action === "review") {
-        try { return json({ ok: true, reviewer: (await startReview(c, typeof body.target === "string" ? body.target : undefined)).id }); } catch (e: any) { return fail(e.message); }
+        try { return json({ ok: true, reviewer: (await startReview(c, typeof body.target === "string" ? body.target : undefined, body.kind === "security" ? "security" : undefined)).id }); } catch (e: any) { return fail(e.message); }
       }
       if (req.method === "POST" && action === "decide") {
         try { convos.decide(c.id, String(body.req), body.decision === "always" ? "always" : body.decision === "allow" ? "allow" : "deny"); } catch (e: any) { return fail(e.message); }
@@ -888,6 +975,9 @@ const server = Bun.serve({
         if (req.method === "POST" && id === "semantic") { brain.enableSemantic(); return json(brain.info()); }
         if (req.method === "GET" && id === "search") return json(await brain.search(url.searchParams.get("q") || "", Number(url.searchParams.get("n")) || 8, url.searchParams.get("hint") || "", url.searchParams.has("ctx")));
         if (req.method === "GET" && id === "blocked") return json(brain.blockedNotes());
+        if (req.method === "GET" && id === "tidy") return json(brain.tidy());
+        if (req.method === "POST" && id === "tidy") return json({ moved: brain.autoTidy(), ...brain.tidy() });
+        if (req.method === "POST" && id === "archive") return json({ to: brain.archive(String(body.note || "")), ...brain.tidy() });
         if (req.method === "POST" && id === "rules") { brain.setRules(body); return json(brain.info()); }
         if (req.method === "POST" && id === "sync") { brain.sync(); return json(brain.info()); }
         if (req.method === "POST" && id === "open") { openInObsidian(); return json({ ok: true }); }
@@ -897,6 +987,56 @@ const server = Bun.serve({
     }
 
     if (resource === "vigil" && req.method === "POST") { vigil = body; return json({ ok: true }); }
+
+    if (resource === "schedules") {
+      try {
+        if (req.method === "POST" && !id) {
+          const prompt = String(body.prompt || "").trim(), cwd = validCwd(body.cwd);
+          if (!prompt) return fail("escreva o pedido que vai ser agendado");
+          if (!cwd) return fail("pasta não existe");
+          if (!isTarget(body.target)) return fail("escolha uma conta para o agendamento");
+          return json(schedules.add({ prompt, cwd, target: body.target, mode: asMode(body.mode), brain: body.brain !== false, isolate: !!body.isolate, kind: body.kind === "daily" ? "daily" : "once", at: Number(body.at) || undefined, time: typeof body.time === "string" ? body.time : undefined, days: Array.isArray(body.days) ? body.days.map(Number) : undefined }));
+        }
+        if (req.method === "POST" && action === "run") return json(await schedules.runNow(id));
+        if (req.method === "POST" && (action === "on" || action === "off")) return json(schedules.toggle(id, action === "on"));
+        if (req.method === "DELETE") { schedules.remove(id); return json({ ok: true }); }
+      } catch (e: any) { return fail(e.message); }
+      return json(schedules.list());
+    }
+
+    if (resource === "missions") {
+      try {
+        if (req.method === "POST" && !id) {
+          const prompt = String(body.prompt || "").trim(), cwd = validCwd(body.cwd);
+          const workers: string[] = (Array.isArray(body.targets) ? body.targets : []).filter(isTarget);
+          if (!prompt) return fail("escreva o pedido que o supervisor vai dividir");
+          if (!cwd || !(await repoInfo(cwd))) return fail("o supervisor trabalha com cópias isoladas: escolha uma pasta que seja um repositório git");
+          if (!workers.length) return fail("escolha ao menos uma conta");
+          await Promise.all(accounts.filter((a) => !statusCache.has(a.id)).map(refreshStatus));
+          return json(missions.create({ prompt, cwd, planner: workers[0], workers }));
+        }
+        if (req.method === "POST" && action === "start") return json(await missions.start(id));
+        if (req.method === "POST" && action === "merge") return json(await missions.merge(id));
+        if (req.method === "DELETE") { missions.remove(id); return json({ ok: true }); }
+        if (id) {
+          const m = missions.get(id);
+          if (!m) return fail("missão não existe", 404);
+          // o estado de cada tarefa sai da conversa dela
+          return json({ ...m, tasks: m.tasks.map((t) => { const c = t.convo ? convos.get(t.convo) : null, last = c?.messages.at(-1); return { ...t, working: !!c?.working, waiting: !!c?.waiting, state: t.error ? "erro" : !t.convo ? "pendente" : !c ? "apagada" : c.working ? (last?.review ? "em revisão" : "rodando") : last?.state === "error" ? "erro" : "pronta", who: c ? accName(account(c.accountId || "")) : "" }; }) });
+        }
+      } catch (e: any) { return fail(e.message); }
+      return json(missions.list());
+    }
+
+    if (resource === "tools") {
+      if (req.method === "POST") {
+        let did = null;
+        if (typeof body.on === "boolean") { settings.shareTools = body.on; did = shareTools(body.on); writeFileSync(SETTINGS_FILE, JSON.stringify(settings)); }
+        else if (body.sync && settings.shareTools) did = shareTools(true);
+        return json({ on: settings.shareTools, did, ...tools.summary(accounts) });
+      }
+      return json({ on: settings.shareTools, ...tools.summary(accounts) });
+    }
 
     // o código de acesso só sai por aqui, pra página local montar o QR
     if (resource === "remote") {
@@ -948,7 +1088,7 @@ const server = Bun.serve({
       if (typeof body.rotate === "boolean") settings.rotate = body.rotate;
       if (typeof body.onboarded === "boolean") settings.onboarded = body.onboarded;
       if (typeof body.importChats === "boolean") settings.importChats = body.importChats;
-      for (const k of ["keepAwake", "lidAwake", "lidFreeze", "autoReview", "autoRead"] as const) if (typeof body[k] === "boolean") settings[k] = body[k];
+      for (const k of ["keepAwake", "lidAwake", "lidFreeze", "autoReview", "autoRead", "suggest", "tidyBrain"] as const) if (typeof body[k] === "boolean") settings[k] = body[k];
       if (typeof body.autoClean === "boolean") { settings.autoClean = body.autoClean; if (body.autoClean) setTimeout(autoClean, 500); }
       if (typeof body.teach === "boolean") { settings.teach = body.teach; teachAll(body.teach); }
       writeFileSync(SETTINGS_FILE, JSON.stringify(settings));
@@ -969,6 +1109,7 @@ const server = Bun.serve({
         accounts.push(acc);
         saveAccounts();
         if (settings.teach) teach(acc, true);
+        if (settings.shareTools) { try { tools.syncSkills(acc); } catch {} }
         return json({ id: accId });
       }
       const acc = account(id);
@@ -1059,6 +1200,8 @@ const server = Bun.serve({
 function shutdown() {
   convos.flush();
   remote.stop();
+  schedules.stop();
+  missions.stop();
   for (const s of sessions.values()) if (s.alive) { s.alive = false; archive(s); s.proc.kill(); }
   process.exit(0);
 }
@@ -1069,4 +1212,9 @@ try { brain.sync(); } catch (e) { console.error("cérebro: falha ao sincronizar"
 // mantém o bloco de instruções em dia (caminho do cofre, texto) nas contas já ensinadas
 if (settings.teach) teachAll(true);
 try { applyRemote(); } catch (e: any) { console.error(e.message); }
+if (settings.shareTools) shareTools(true);
+// arrumação do cérebro: de hora em hora, só o que dá pra fazer sem ler (nota vazia e cópia idêntica)
+const tidyNow = () => { if (settings.tidyBrain) { try { brain.autoTidy(); } catch (e) { console.error("cérebro: arrumação", e); } } };
+setInterval(tidyNow, 3_600_000);
+tidyNow();
 console.log(`revoada em http://127.0.0.1:${server.port}  (perfis em ${ROOT})`);

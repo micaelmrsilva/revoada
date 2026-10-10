@@ -87,7 +87,7 @@ beforeAll(async () => {
 
   server = Bun.spawn(["bun", "server.ts"], {
     cwd: ROOT, stdout: "ignore", stderr: "inherit",
-    env: { ...process.env, HOME, REVOADA_HOME: join(HOME, ".revoada"), REVOADA_VAULT: VAULT, PORT: String(PORT), PATH: `${join(ROOT, "tests/stubs")}:${process.env.PATH}`, GEMINI_API_KEY: "", OLLAMA_HOST: "http://127.0.0.1:1" },
+    env: { ...process.env, HOME, REVOADA_HOME: join(HOME, ".revoada"), REVOADA_VAULT: VAULT, PORT: String(PORT), PATH: `${join(ROOT, "tests/stubs")}:${process.env.PATH}`, GEMINI_API_KEY: "", OLLAMA_HOST: "http://127.0.0.1:1", TZ: "UTC", REVOADA_ASSETS: "", REVOADA_PROJECTS: "", REVOADA_REMOTE_PORT: "" },
   });
   await until(async () => (await fetch(`${ORIGIN}/api/dirs`).then((r) => r.ok).catch(() => false)));
   await get("state?refresh=1");
@@ -418,6 +418,165 @@ describe("conversa ao vivo e fila", () => {
     expect(c.queue).toBeUndefined();
     expect(texts(c)).toContain("retomada=true"); // a da fila continuou a mesma sessão do agente
   }, SLOW);
+});
+
+describe("sugestão, auditoria de segurança e raio-x", () => {
+  test("quando o agente termina, a conversa ganha a próxima mensagem provável; mandar outra apaga", async () => {
+    const id = await chat("claude-padrao", "diga olá de novo");
+    const c = await until(async () => { const x = await get(`convos/${id}`); return x.suggest && x; });
+    expect(c.suggest).toBe("roda os testes agora");
+    await post(`convos/${id}/send`, { text: "outra coisa" });
+    expect((await get(`convos/${id}`)).suggest).toBeUndefined();
+    await idle(id);
+    // desligada nos ajustes, não gasta conta com isso
+    await post("settings", { suggest: false });
+    const quiet = await idle(await chat("claude-padrao", "sem sugestão"));
+    await Bun.sleep(400);
+    expect((await get(`convos/${quiet.id}`)).suggest).toBeUndefined();
+    await post("settings", { suggest: true });
+  }, SLOW);
+
+  test("auditoria de segurança roda sem diff e sem git, só leitura, com o roteiro próprio", async () => {
+    const reserva = (await get("state")).accounts.find((a: any) => a.label === "reserva").id;
+    const id = await chat(reserva, "oi", { cwd: HOME });
+    await idle(id);
+    expect((await api(`convos/${id}/review`, "POST", {})).status).toBe(400); // a revisão comum precisa de mudança
+    await post(`convos/${id}/review`, { kind: "security" });
+    const c = await idle(id);
+    expect([c.messages.at(-1).review, c.messages.at(-1).reviewKind]).toEqual([true, "security"]);
+    expect(texts(c)).toContain("auditoria=true");
+    expect(texts(c)).toContain("leitura=true");
+  }, SLOW);
+
+  test("cada resposta registra o que a Revoada pôs no pedido", async () => {
+    const id = await chat("claude-padrao", "primeira");
+    let c = await idle(id);
+    expect(c.messages[1].sent).toEqual({ ask: 8, brain: 0, handoff: 0, resumed: false });
+    await post(`convos/${id}/send`, { text: "segunda, na mesma sessão" });
+    c = await idle(id);
+    expect(c.messages[3].sent).toEqual({ ask: 24, brain: 0, handoff: 0, resumed: true });
+    // trocar de conta leva o histórico, e ele aparece na conta
+    const reserva = (await get("state")).accounts.find((a: any) => a.label === "reserva").id;
+    await post(`convos/${id}/send`, { text: "terceira", target: reserva });
+    c = await idle(id);
+    expect(c.messages[5].sent.resumed).toBe(false);
+    expect(c.messages[5].sent.handoff).toBeGreaterThan(200);
+  }, SLOW);
+});
+
+describe("pedidos agendados", () => {
+  test("agenda, roda na hora pedida a mão e recusa hora que já passou", async () => {
+    expect((await api("schedules", "POST", { prompt: "relatório", target: "claude-padrao", cwd: HOME, kind: "once", at: Date.now() - 60_000 })).body.error).toContain("já passou");
+    expect((await api("schedules", "POST", { prompt: "relatório", target: "conta-que-nao-existe", cwd: HOME, kind: "daily", time: "03:00" })).status).toBe(400);
+    const s = await post("schedules", { prompt: "relatório da madrugada", target: "claude-padrao", cwd: HOME, kind: "daily", time: "03:00", days: [1, 3] });
+    expect(s.enabled).toBe(true);
+    expect([1, 3]).toContain(new Date(s.next).getDay());
+    expect(new Date(s.next).getHours()).toBe(3);
+    const ran = await post(`schedules/${s.id}/run`);
+    const c = await idle(ran.last.convo);
+    expect(c.messages[0].text).toBe("relatório da madrugada");
+    expect((await post(`schedules/${s.id}/off`)).next).toBeNull();
+    expect((await post(`schedules/${s.id}/on`)).next).toBe(s.next);
+    await api(`schedules/${s.id}`, "DELETE");
+    expect(await get("schedules")).toEqual([]);
+  }, SLOW);
+});
+
+describe("skills e MCP em todas as contas", () => {
+  test("skill da conta padrão vira atalho nas outras; pasta própria da conta não é tocada", async () => {
+    const reserva = (await get("state")).accounts.find((a: any) => a.label === "reserva").id;
+    const src = join(HOME, ".codex/skills"), dest = join(HOME, ".revoada/profiles", reserva, "skills");
+    for (const n of ["resumir", "auditar"]) { mkdirSync(join(src, n), { recursive: true }); writeFileSync(join(src, n, "SKILL.md"), `# ${n}\n`); }
+    mkdirSync(join(src, "sem-skill")); // pasta sem SKILL.md não é skill
+    mkdirSync(join(dest, "propria"), { recursive: true }); writeFileSync(join(dest, "propria", "SKILL.md"), "minha\n");
+    const codex = (await get("state")).accounts.filter((a: any) => a.provider === "codex" && a.isolated).length; // toda conta isolada do Codex recebe
+    const on = await post("tools", { on: true });
+    expect(on.did.linked).toBe(2 * codex);
+    expect(readFileSync(join(dest, "resumir", "SKILL.md"), "utf8")).toBe("# resumir\n");
+    expect(require("fs").lstatSync(join(dest, "resumir")).isSymbolicLink()).toBe(true);
+    expect(existsSync(join(dest, "sem-skill"))).toBe(false);
+    expect(on.accounts.find((a: any) => a.id === reserva)).toEqual({ id: reserva, linked: 2, own: 1 });
+    // saiu da fonte: o atalho some na próxima sincronização; a pasta própria fica
+    rmSync(join(src, "auditar"), { recursive: true });
+    expect((await post("tools", { sync: true })).did.removed).toBe(codex);
+    expect(existsSync(join(dest, "auditar"))).toBe(false);
+    expect(readFileSync(join(dest, "propria", "SKILL.md"), "utf8")).toBe("minha\n");
+  });
+
+  test("servidores MCP da conta padrão vão como argumento nas outras contas, e só nelas", async () => {
+    writeFileSync(join(HOME, ".claude.json"), JSON.stringify({ mcpServers: { demo: { command: "demo-mcp", args: ["--porta", "1"], env: { CHAVE: "segredo" } } } }));
+    writeFileSync(join(HOME, ".codex/config.toml"), 'model = "x"\n\n[mcp_servers.demo]\ncommand = "demo-mcp"\nargs = ["--porta", "1"]\n\n[mcp_servers.demo.env]\nCHAVE = "segredo"\n');
+    const s = await get("state");
+    const reserva = s.accounts.find((a: any) => a.label === "reserva").id;
+    const extra = (await post("accounts", { provider: "claude", label: "segunda" })).id;
+    await get("state?refresh=1");
+    expect(texts(await idle(await chat(reserva, "com mcp")))).toContain('mcp=mcp_servers.demo={ command = "demo-mcp", args = ["--porta", "1"], env = { CHAVE = "segredo" } }');
+    const file = texts(await idle(await chat(extra, "com mcp"))).match(/mcp=(\S+)/)![1];
+    expect(JSON.parse(readFileSync(file, "utf8"))).toEqual({ mcpServers: { demo: { command: "demo-mcp", args: ["--porta", "1"], env: { CHAVE: "segredo" } } } });
+    expect(require("fs").statSync(file).mode & 0o077).toBe(0); // tem chave dentro: só o dono lê
+    expect(texts(await idle(await chat("claude-padrao", "sem mcp")))).toContain("mcp=nao"); // a padrão já tem os dela
+    // desligar tira os atalhos e os argumentos
+    const off = await post("tools", { on: false });
+    expect(off.did.removed).toBe(s.accounts.filter((a: any) => a.provider === "codex" && a.isolated).length);
+    expect(texts(await idle(await chat(reserva, "sem mcp")))).toContain("mcp=nao");
+    expect(existsSync(join(HOME, ".revoada/profiles", reserva, "skills", "propria", "SKILL.md"))).toBe(true);
+  }, SLOW);
+});
+
+describe("arrumação do cérebro", () => {
+  test("acha nota vazia, cópia idêntica e parecida; arquivar tira da busca sem apagar", async () => {
+    const body = "A zebra de teste usa listras verticais no painel de relatórios e exporta em CSV toda sexta de manhã para a equipe.";
+    await post("brain/note", { title: "relatorio zebra", text: body });
+    await post("brain/note", { title: "relatorio zebra copia", text: body });
+    await post("brain/note", { title: "relatorio zebra parecido", text: body + " O time comercial também recebe." });
+    await post("brain/note", { title: "vazia", text: "ok" });
+    const t = await get("brain/tidy");
+    expect(t.empty).toEqual(["Revoada/vazia.md"]);
+    expect(t.copies.length).toBe(1);
+    expect(t.copies[0].drop.length).toBe(1);
+    expect(t.similar.some((p: any) => [p.a, p.b].includes("Revoada/relatorio zebra parecido.md") && p.score >= 0.6)).toBe(true);
+    // automático: só o que não exige ler
+    const auto = await post("brain/tidy");
+    expect(auto.moved.sort()).toEqual([t.copies[0].drop[0], "Revoada/vazia.md"].sort());
+    expect(existsSync(join(VAULT, "Revoada/Arquivo/vazia.md"))).toBe(true);
+    expect([auto.empty, auto.copies]).toEqual([[], []]);
+    // a parecida continua lá, esperando alguém decidir; arquivar à mão tira da busca
+    const hits = async () => (await get("brain/search?q=zebra+listras+verticais+painel+relatorios&n=10")).map((h: any) => h.note);
+    expect(await hits()).toContain("Revoada/relatorio zebra parecido.md");
+    await post("brain/archive", { note: "Revoada/relatorio zebra parecido.md" });
+    expect(await hits()).not.toContain("Revoada/relatorio zebra parecido.md");
+    expect((await api("brain/archive", "POST", { note: "Agentes/Claude/git/zebra-produto.md" })).status).toBe(400);
+  });
+});
+
+describe("supervisor", () => {
+  test("planeja, espera aprovação, roda cada tarefa em cópia própria com revisão e junta os branches", async () => {
+    const reserva = (await get("state")).accounts.find((a: any) => a.label === "reserva").id;
+    expect((await api("missions", "POST", { prompt: "x", cwd: HOME, targets: ["claude-padrao"] })).body.error).toContain("repositório git");
+    const main = join(GIT, "app");
+    const m = await post("missions", { prompt: "Exportação e importação da loja", cwd: main, targets: ["claude-padrao", reserva] });
+    const plan = await until(async () => { const x = await get(`missions/${m.id}`); return x.state === "plano" && x; });
+    expect(plan.tasks.map((t: any) => [t.title, t.state])).toEqual([["Exportação de pedidos", "pendente"], ["Importação de clientes", "pendente"]]);
+    expect(plan.note).toContain("duas frentes");
+    expect((await get("state")).convos.filter((c: any) => c.cwd.includes("worktrees") && c.title.includes("Exportação")).length).toBe(0); // nada roda antes de aprovar
+    await post(`missions/${m.id}/start`);
+    const done = await until(async () => { const x = await get(`missions/${m.id}`); return x.state === "pronta" && x; }, 25_000);
+    expect(done.tasks.every((t: any) => t.state === "pronta" && t.branch.startsWith("revoada/"))).toBe(true);
+    expect(new Set(done.tasks.map((t: any) => t.branch)).size).toBe(2);
+    // a tarefa que foi para o Codex criou arquivo na cópia dela, fora da pasta principal, e foi revisada
+    const codexTask = await get(`convos/${done.tasks[1].convo}`);
+    expect(codexTask.accountId).toBe(reserva);
+    expect(existsSync(join(codexTask.cwd, "novo.txt"))).toBe(true);
+    expect(existsSync(join(main, "novo.txt"))).toBe(false);
+    expect(codexTask.messages.filter((x: any) => x.review).length).toBe(1);
+    expect(codexTask.messages[0].text).toContain("faça commit");
+    const merged = await post(`missions/${m.id}/merge`);
+    const mc = await idle(merged.merge);
+    for (const t of done.tasks) expect(mc.messages[0].text).toContain(t.branch);
+    expect(mc.worktree.branch.startsWith("revoada/juntar")).toBe(true);
+    await api(`missions/${m.id}`, "DELETE");
+    expect((await get("missions")).length).toBe(0);
+  }, 60_000);
 });
 
 describe("acompanhar pelo celular", () => {

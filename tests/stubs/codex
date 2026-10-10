@@ -16,5 +16,5 @@ const name = basename(home), resume = a[1] === "resume" ? a[2] : null;
 if (all.includes("CRIA-ARQUIVO")) writeFileSync("novo.txt", "feito pelo agente");
 if (!resume) out({ type: "thread.started", thread_id: `t-${name}` });
 if (all.includes("CRIA-ARQUIVO")) out({ type: "item.completed", item: { id: "item_f", type: "file_change", changes: [{ path: "novo.txt", kind: "add" }], status: "completed" } });
-out({ type: "item.completed", item: { id: "item_0", type: "agent_message", text: resume ? `retomei ${resume}` : `nova; historico=${all.includes("<conversa-anterior>")}; viu-retomada=${all.includes("retomei")}; viu-comando=${all.includes("rodou: ls")}; cerebro=${all.includes("<contexto-do-cerebro>")}; imagens=${a.filter((x) => x === "-i").length}` } });
+out({ type: "item.completed", item: { id: "item_0", type: "agent_message", text: resume ? `retomei ${resume}` : `nova; historico=${all.includes("<conversa-anterior>")}; viu-retomada=${all.includes("retomei")}; viu-comando=${all.includes("rodou: ls")}; cerebro=${all.includes("<contexto-do-cerebro>")}; imagens=${a.filter((x) => x === "-i").length}; mcp=${a.filter((x) => x.startsWith("mcp_servers.")).join("|") || "nao"}` } });
 out({ type: "turn.completed", usage: { input_tokens: 1200, cached_input_tokens: 1000, output_tokens: 30 } });

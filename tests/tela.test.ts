@@ -81,6 +81,16 @@ describe.skipIf(!CHROME)("tela", () => {
     await page(`document.querySelector("#msgs .acts > summary").click();`);
     await until(`document.querySelector("#msgs .acts").open && document.querySelector("#msgs .acts .what")`);
     expect(await page(OVERFLOW)).toEqual({ over: 0, scroll: 0, col: 760 });
+    // cada passo é uma linha com o que o agente disse que ia fazer; o comando cru só aparece ao abrir o passo
+    const steps = await page(`const g = document.querySelector("#msgs .acts"); const rows = [...g.querySelectorAll(".astep")];
+      const before = rows.map((e) => (e.querySelector("summary") || e).innerText.trim());
+      const boxed = rows.some((e) => parseFloat(getComputedStyle(e).borderTopWidth) > 0);
+      // fechado, cada passo é uma linha baixa que ocupa a largura da lista (uma classe trocada já fez isto virar uma coluna de 44px)
+      const lines = rows.every((e) => { const r = e.getBoundingClientRect(), t = (e.querySelector(".what") || e).getBoundingClientRect(); return r.height < 34 && t.width > 200; });
+      g.querySelector(".astep > summary").click(); await new Promise((r) => setTimeout(r, 100));
+      return { before, boxed, lines, shown: g.querySelector(".astep pre.cmdline").innerText.includes("criar-contas.sh") && g.querySelector(".astep pre.cmdline").getBoundingClientRect().height > 0 };`);
+    expect(steps).toEqual({ before: ["Confere o andamento da criação da rodada r9", "Read ops/disparo/log.txt"], boxed: false, lines: true, shown: true });
+    expect(await page(OVERFLOW)).toEqual({ over: 0, scroll: 0, col: 760 });
     // janela estreita: a coluna encolhe e o conteúdo acompanha
     await cdp("Emulation.setDeviceMetricsOverride", { width: 760, height: 800, deviceScaleFactor: 1, mobile: false });
     await Bun.sleep(150);
@@ -145,6 +155,71 @@ describe.skipIf(!CHROME)("tela", () => {
       expect(row).toEqual({ rotulo: false, icone: true, conta: true, enviar: true });
     } finally { await cdp("Emulation.setDeviceMetricsOverride", { width: 1280, height: 860, deviceScaleFactor: 1, mobile: false }); }
     expect(await page(`return document.querySelector("#brainChip .lb").getBoundingClientRect().width > 0`)).toBe(true); // na largura normal o nome volta
+  }, SLOW);
+
+  test("agente terminou: o campo oferece o próximo pedido (Tab aceita) e os tokens abrem o raio-x", async () => {
+    const id = await env.chat("claude-padrao", "diga olá");
+    await env.idle(id);
+    await page(`go({ type: "chat", id: "${id}" });`);
+    await until(`chat && chat.id === "${id}" && chat.suggest && document.querySelector("#prompt").placeholder === chat.suggest`);
+    expect(await page(`return [document.querySelector("#prompt").placeholder, document.querySelector("#notes").textContent, [...document.querySelectorAll("#chActs button")].map((b) => b.textContent)]`))
+      .toEqual(["roda os testes agora", "sugestão · Tab aceita · Enter envia", ["Mudanças", "Revisar", "Segurança"]]);
+    await page(key("Tab"));
+    expect(await page(`return document.querySelector("#prompt").value`)).toBe("roda os testes agora");
+    // começou a escrever outra coisa: a sugestão sai da frente
+    await page(`const p = document.querySelector("#prompt"); p.value = ""; p.dispatchEvent(new Event("input", { bubbles: true }));`);
+    await page(`document.querySelector("#msgs [data-xray]").click();`);
+    await until(`document.querySelector("#msgs .xray")`);
+    const x = await page(`const e = document.querySelector("#msgs .xray"); return { text: e.innerText.replace(/\\s+/g, " "), bars: e.querySelectorAll(".bar i").length };`);
+    expect(x.text).toContain("de entrada");
+    expect(x.text).toContain("seu pedido");
+    expect(x.bars).toBeGreaterThan(1);
+    expect(await page(OVERFLOW)).toEqual({ over: 0, scroll: 0, col: 760 });
+    await page(`document.querySelector("#msgs [data-xray]").click();`);
+    await until(`!document.querySelector("#msgs .xray")`);
+  }, SLOW);
+
+  test("agendar pelo campo: o pedido sai do campo, aparece em Agendados e some ao apagar", async () => {
+    await page(`go({ type: "home" }); const p = document.querySelector("#prompt"); p.value = "relatório de vendas da semana"; p.dispatchEvent(new Event("input", { bubbles: true })); paintComposer();`);
+    await until(`getComputedStyle(document.querySelector("#schedChip")).display !== "none"`);
+    await page(`document.querySelector("#schedChip").click();`);
+    await until(`document.querySelector("#popSched").classList.contains("on")`);
+    await page(`document.querySelector('#schedKind [data-k="daily"]').click(); document.querySelector('#schedDays [data-d="1"]').click(); document.querySelector("#schedSave").click();`);
+    const list = await env.until(async () => { const l = await env.api("schedules"); return l.length === 1 && l; });
+    expect([list[0].prompt, list[0].kind, list[0].time, list[0].days, list[0].enabled]).toEqual(["relatório de vendas da semana", "daily", "03:00", [1], true]);
+    expect(await page(`return [document.querySelector("#prompt").value, document.querySelector("#popSched").classList.contains("on")]`)).toEqual(["", false]);
+    await page(`await refresh(); go({ type: "sched" });`);
+    await until(`document.querySelector("#schedList .r")`);
+    expect(await page(`return [document.querySelector("#schedLead").textContent, document.querySelector("#schedList .r b").textContent, document.querySelector("#schedCount").textContent, document.querySelector("#schedList small").textContent.includes("todo dia às 03:00 (seg)")]`))
+      .toEqual(["1 pedido agendado.", "relatório de vendas da semana", "1", true]);
+    await page(`document.querySelector("#schedList [data-rm]").click();`);
+    await until(`!document.querySelector("#schedList .r")`);
+    expect(await env.api("schedules")).toEqual([]);
+  }, SLOW);
+
+  test("supervisor pela tela: plano, aprovação e tarefas até o fim", async () => {
+    await page(`setCwd(${JSON.stringify("")} || "${env.repo}"); go({ type: "home" });`);
+    await until(`getComputedStyle(document.querySelector("#supChip")).display !== "none"`);
+    await page(`document.querySelector("#supChip").click(); const p = document.querySelector("#prompt"); p.value = "Exportação e importação da loja"; p.dispatchEvent(new Event("input", { bubbles: true })); document.querySelector("#send").click();`);
+    await until(`view.type === "mission" && document.querySelector('#misActs [data-m="start"]')`);
+    expect(await page(`return [document.querySelector("#misLead").textContent, document.querySelector('#misActs [data-m="start"]').textContent, [...document.querySelectorAll("#misTasks .r b")].map((b) => b.textContent), [...document.querySelectorAll("#misTasks .tag")].map((b) => b.textContent)]`))
+      .toEqual(["Exportação e importação da loja", "Rodar 2 tarefas", ["1. Exportação de pedidos", "2. Importação de clientes"], ["pendente", "pendente"]]);
+    // na lateral, a missão que espera aprovação aparece marcada
+    expect(await page(`await refresh(); return !!document.querySelector('#threads [data-open^="mission:"] .dot.wait')`)).toBe(true);
+    await page(`document.querySelector('#misActs [data-m="start"]').click();`);
+    await until(`mission && mission.state === "pronta" && [...document.querySelectorAll("#misTasks .tag")].every((t) => t.textContent === "pronta")`, 30_000);
+    expect(await page(`return [document.querySelectorAll("#misTasks [data-conv]").length, !!document.querySelector('#misActs [data-m="merge"]'), document.documentElement.scrollWidth <= innerWidth]`)).toEqual([2, true, true]);
+    await page(`setCwd("${env.home}");`);
+  }, 60_000);
+
+  test("Contas mostra skills e MCP; Cérebro mostra a arrumação", async () => {
+    await page(`go({ type: "accounts" });`);
+    await until(`document.querySelector("#toolsBox .switch")`);
+    expect(await page(`return document.querySelector("#toolsBox").innerText.includes("Usar nas outras contas")`)).toBe(true);
+    await page(`go({ type: "brain" });`);
+    await until(`document.querySelector("#brainTidy .switch")`);
+    expect(await page(`return document.querySelector("#brainTidy").innerText.includes("Arquivar sozinho")`)).toBe(true);
+    await page(`go({ type: "home" });`);
   }, SLOW);
 
   test("Esc nega, e o cartão de negado com comando comprido não alarga a conversa", async () => {

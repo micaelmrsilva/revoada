@@ -87,7 +87,7 @@ function loadClaude(file: string): Msg[] {
         if (b.type === "text" && b.text?.trim()) cur.items!.push({ k, kind: "text", text: b.text });
         else if (b.type === "tool_use") {
           const inp = b.input || {};
-          const it: any = b.name === "Bash" ? { k, kind: "cmd", command: inp.command || "", output: "", exit: null, status: "completed" }
+          const it: any = b.name === "Bash" ? { k, kind: "cmd", command: inp.command || "", ...(typeof inp.description === "string" && inp.description.trim() ? { desc: clip(inp.description.trim(), 200) } : {}), output: "", exit: null, status: "completed" }
             : ["Edit", "Write", "MultiEdit", "NotebookEdit"].includes(b.name) ? { k, kind: "files", changes: [{ path: inp.file_path || inp.notebook_path || "", kind: b.name === "Write" ? "add" : "update" }], status: "completed", output: "" }
             : { k, kind: "tool", name: b.name, detail: clip(inp.file_path || inp.pattern || inp.query || inp.url || inp.description || inp, 300), output: "", status: "completed" };
           cur.items!.push(it as Item);
