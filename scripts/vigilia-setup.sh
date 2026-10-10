@@ -16,6 +16,13 @@ AGENT="$HOME/Library/LaunchAgents/dev.revoada.vigia.plist"
 BACKSTOP="$HOME/.revoada/vigia.sh"
 LABEL=dev.revoada.vigia
 
+# instalações antigas usavam outro nome para o vigia: sai junto, pra não ficarem dois rodando
+for old in "$HOME"/Library/LaunchAgents/dev.*.revoada.vigia.plist; do
+  [ -f "$old" ] || continue
+  launchctl bootout "gui/$(id -u)/$(basename "$old" .plist)" 2>/dev/null || true
+  rm -f "$old"
+done
+
 if [ "${1:-}" = "--remover" ]; then
   sudo /usr/bin/pmset -a disablesleep 0 || true
   launchctl bootout "gui/$(id -u)/$LABEL" 2>/dev/null || true
