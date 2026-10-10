@@ -8,7 +8,9 @@ import { basename, join } from "path";
 const ROOT = join(import.meta.dir, "..");
 const PORT = 4900 + Math.floor(Math.random() * 90);
 const ORIGIN = `http://127.0.0.1:${PORT}`;
-const HOME = mkdtempSync(join(tmpdir(), "revoada-teste-"));
+// fora de /tmp: o app esconde de propósito o histórico de conversas que rodaram lá (no macOS a
+// pasta temporária já é outra; no GitHub usa-se a do runner)
+const HOME = mkdtempSync(join(process.env.RUNNER_TEMP || tmpdir(), "revoada-teste-"));
 const VAULT = join(HOME, "cofre");
 const GIT = join(HOME, "git");
 // o Claude Code nomeia a pasta de cada projeto pelo caminho, com traços no lugar das barras
