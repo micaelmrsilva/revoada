@@ -21,7 +21,7 @@ export type Tokens = { in: number; out: number; cache: number; usd?: number };
 export type Item =
   | { k: string; kind: "text"; text: string }
   | { k: string; kind: "think"; text: string }
-  | { k: string; kind: "cmd"; command: string; output: string; exit: number | null; status: string }
+  | { k: string; kind: "cmd"; command: string; output: string; exit: number | null; status: string; desc?: string }
   | { k: string; kind: "files"; changes: { path: string; kind: string }[]; status: string }
   | { k: string; kind: "tool"; name: string; detail: string; output: string; status: string }
   | { k: string; kind: "todo"; items: { text: string; done: boolean }[] }
@@ -154,7 +154,7 @@ const ADAPTERS: Record<string, Adapter> = {
           else if (b.type === "thinking") { if (b.thinking) s.up(key, { kind: "think", text: b.thinking }); }
           else if (b.type === "tool_use") {
             const inp = b.input || {};
-            if (b.name === "Bash") s.up(b.id, { kind: "cmd", command: inp.command || "", output: "", exit: null, status: "in_progress" });
+            if (b.name === "Bash") s.up(b.id, { kind: "cmd", command: inp.command || "", output: "", exit: null, status: "in_progress", ...(typeof inp.description === "string" && inp.description.trim() ? { desc: clip(inp.description.trim(), 200) } : {}) }); // desc: o que o próprio agente diz que o comando faz
             else if (["Edit", "Write", "MultiEdit", "NotebookEdit"].includes(b.name)) s.up(b.id, { kind: "files", changes: [{ path: inp.file_path || inp.notebook_path || "", kind: b.name === "Write" ? "add" : "update" }], status: "in_progress" });
             else if (b.name === "TodoWrite") s.up(b.id, { kind: "todo", items: (inp.todos || []).map((t: any) => ({ text: t.content, done: t.status === "completed" })) });
             else s.up(b.id, { kind: "tool", name: b.name, detail: clip(inp.file_path || inp.pattern || inp.query || inp.url || inp.description || inp, 400), output: "", status: "in_progress" });

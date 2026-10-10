@@ -78,8 +78,19 @@ describe.skipIf(!CHROME)("tela", () => {
       groups: [...m.querySelectorAll(".acts")].map((d) => [d.querySelector(".lbl").textContent, d.open]) };`);
     expect(seen).toEqual({ rows: 4, cols: 2, raw: false, nested: 1, title: true, code: true, groups: [["Rodou 1 comando, leu 1 arquivo", false]] });
     // aberto, o grupo mostra o comando comprido numa linha só, cortado com reticências, sem empurrar a coluna
+    console.log("DEBUG", await page(`return { view: JSON.stringify(view), msgs: document.querySelector("#msgs").innerHTML.length, acts: document.querySelectorAll("#msgs .acts").length, html: document.querySelector("#msgs").innerHTML.slice(0, 300), err: window.__err || null }`));
     await page(`document.querySelector("#msgs .acts > summary").click();`);
     await until(`document.querySelector("#msgs .acts").open && document.querySelector("#msgs .acts .what")`);
+    expect(await page(OVERFLOW)).toEqual({ over: 0, scroll: 0, col: 760 });
+    // cada passo é uma linha com o que o agente disse que ia fazer; o comando cru só aparece ao abrir o passo
+    const steps = await page(`const g = document.querySelector("#msgs .acts"); const rows = [...g.querySelectorAll(".astep")];
+      const before = rows.map((e) => (e.querySelector("summary") || e).innerText.trim());
+      const boxed = rows.some((e) => parseFloat(getComputedStyle(e).borderTopWidth) > 0);
+      // fechado, cada passo é uma linha baixa que ocupa a largura da lista (uma classe trocada já fez isto virar uma coluna de 44px)
+      const lines = rows.every((e) => { const r = e.getBoundingClientRect(), t = (e.querySelector(".what") || e).getBoundingClientRect(); return r.height < 34 && t.width > 200; });
+      g.querySelector(".astep > summary").click(); await new Promise((r) => setTimeout(r, 100));
+      return { before, boxed, lines, shown: g.querySelector(".astep pre.cmdline").innerText.includes("criar-contas.sh") && g.querySelector(".astep pre.cmdline").getBoundingClientRect().height > 0 };`);
+    expect(steps).toEqual({ before: ["Confere o andamento da criação da rodada r9", "Read ops/disparo/log.txt"], boxed: false, lines: true, shown: true });
     expect(await page(OVERFLOW)).toEqual({ over: 0, scroll: 0, col: 760 });
     // janela estreita: a coluna encolhe e o conteúdo acompanha
     await cdp("Emulation.setDeviceMetricsOverride", { width: 760, height: 800, deviceScaleFactor: 1, mobile: false });

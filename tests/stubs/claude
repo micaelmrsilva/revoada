@@ -48,7 +48,7 @@ if (a.includes("--permission-prompt-tool")) {
   out({ type: "user", message: { content: [{ type: "tool_result", tool_use_id: "tu1", content: answer.behavior === "allow" ? "" : "negado", is_error: answer.behavior !== "allow" }] } });
   out({ type: "assistant", message: { id: "m2", content: [{ type: "text", text: answer.behavior === "allow" ? "permitido" : "negado" }] } });
 } else if (RICH) {
-  out({ type: "assistant", message: { id: "d1", content: [{ type: "tool_use", id: "dt1", name: "Bash", input: { command: LONG } }] } });
+  out({ type: "assistant", message: { id: "d1", content: [{ type: "tool_use", id: "dt1", name: "Bash", input: { command: LONG, description: "Confere o andamento da criação da rodada r9" } }] } });
   await nap(120);
   out({ type: "user", message: { content: [{ type: "tool_result", tool_use_id: "dt1", content: "14:42\noka: 300/500" }] } });
   out({ type: "assistant", message: { id: "d2", content: [{ type: "tool_use", id: "dt2", name: "Read", input: { file_path: "ops/disparo/log.txt" } }] } });

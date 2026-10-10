@@ -198,7 +198,18 @@
   .acts > summary .lbl { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .acts > summary::after { content: "›"; color: var(--faint); transition: transform .15s; flex: none; }
   .acts[open] > summary::after { transform: rotate(90deg); }
-  .acts > .in { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; margin-top: 10px; }
+  .acts > summary .cnt { flex: none; color: var(--faint); font-size: 12.5px; }
+  /* aberto, o grupo é uma lista de passos numa régua: uma linha por passo, sem caixa; clicar no passo mostra o detalhe */
+  .acts > .in { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1px; margin: 8px 0 4px 3px; padding-left: 14px; border-left: 1.5px solid var(--line); }
+  .acts .astep { border: 0; border-radius: 0; font-size: 13.5px; }
+  .acts .astep > summary, .acts .astep.flat { padding: 3px 0; gap: 10px; }
+  .acts .astep[open] > summary { border-bottom: 0; }
+  .acts .astep .what { color: var(--mute); } .acts .astep .what b { font-weight: 500; }
+  .acts .astep > summary:hover .what, .acts .astep[open] > summary .what { color: var(--text); }
+  .acts .astep .what:not(.plain) { font-size: 12.5px; }
+  .acts .astep pre { background: var(--soft); border-radius: 8px; margin: 4px 0 8px; max-height: 260px; }
+  .acts .astep pre.cmdline { color: var(--text); margin-bottom: 4px; max-height: 160px; }
+  .acts .thought { color: var(--mute); font-size: 14px; padding: 5px 0; } .acts .thought p { margin: 0 0 6px; }
   .act { border: 1px solid var(--line); border-radius: 12px; font-size: 13px; min-width: 0; }
   .act > summary, .act.flat { display: flex; align-items: center; gap: 10px; padding: 8px 12px; cursor: pointer; list-style: none; min-width: 0; }
   .act > summary::-webkit-details-marker { display: none; }
@@ -811,19 +822,25 @@ function itemHtml(it, key) {
     return `<div class="askcard"><span class="q">O agente quer ${what}:</span><code>${esc(it.detail)}</code>
       <div class="btns"><button class="btn" data-decide="allow" data-req="${esc(it.req)}">Permitir<kbd>↵</kbd></button><button class="btn line" data-decide="always" data-req="${esc(it.req)}" title="Não pergunta mais sobre ${esc(it.tool)} nesta conversa">Sempre nesta conversa</button><button class="link" data-decide="deny" data-req="${esc(it.req)}">Negar<kbd>esc</kbd></button></div></div>`;
   }
-  if (it.kind === "think") return `<details class="act" data-key="${key}" ${open}><summary><span class="ic">~</span><span class="what plain">Raciocínio</span></summary><div class="think md">${md(it.text)}</div></details>`;
-  if (it.kind === "cmd") { const run = it.exit == null && it.status !== "failed"; return `<details class="act" data-key="${key}" ${open}><summary><span class="ic">$</span><span class="what">${esc(it.command)}</span><span class="st ${run ? "run" : it.exit ? "bad" : ""}">${run ? "rodando" : it.exit ? `saiu com ${it.exit}` : "ok"}</span></summary><pre>${esc(it.output) || "sem saída"}</pre></details>`; }
-  if (it.kind === "files") return `<div class="act flat"><span class="ic">±</span>${it.changes.map((c) => `<span class="file">${esc(short(c.path))}<small>${{ add: "novo", delete: "apagado", update: "editado" }[c.kind] || esc(c.kind)}</small></span>`).join("")}</div>`;
-  if (it.kind === "tool") return `<details class="act" data-key="${key}" ${open}><summary><span class="ic">›</span><span class="what plain"><b style="color:var(--text);font-weight:500">${esc(it.name)}</b> ${esc(it.detail)}</span><span class="st ${it.status === "failed" ? "bad" : it.status === "in_progress" ? "run" : ""}">${it.status === "failed" ? "falhou" : it.status === "in_progress" ? "rodando" : ""}</span></summary><pre>${esc(it.output) || "sem saída"}</pre></details>`;
+  // raciocínio e narração do agente entre um passo e outro: texto corrido e discreto, sem caixa
+  if (it.kind === "think") return `<div class="thought md">${md(it.text)}</div>`;
+  // um passo por linha: o que o agente disse que ia fazer (ou o comando, quando ele não disse); abrir mostra comando e saída
+  if (it.kind === "cmd") {
+    const run = it.exit == null && it.status !== "failed";
+    return `<details class="act astep" data-key="${key}" ${open}><summary><span class="what ${it.desc ? "plain" : ""}">${esc(it.desc || it.command.split("\n")[0])}</span>${run || it.exit ? `<span class="st ${run ? "run" : "bad"}">${run ? "rodando" : `saiu com ${it.exit}`}</span>` : ""}</summary>${it.desc || it.command.includes("\n") ? `<pre class="cmdline">${esc(it.command)}</pre>` : ""}<pre>${esc(it.output) || (run ? "ainda sem saída" : "sem saída")}</pre></details>`;
+  }
+  if (it.kind === "files") return `<div class="act flat astep"><span class="what plain">Editou</span>${it.changes.map((c) => `<span class="file">${esc(short(c.path))}<small>${{ add: "novo", delete: "apagado", update: "editado" }[c.kind] || esc(c.kind)}</small></span>`).join("")}</div>`;
+  if (it.kind === "tool") return `<details class="act astep" data-key="${key}" ${open}><summary><span class="what plain"><b>${esc(it.name)}</b> ${esc(it.detail)}</span><span class="st ${it.status === "failed" ? "bad" : it.status === "in_progress" ? "run" : ""}">${it.status === "failed" ? "falhou" : it.status === "in_progress" ? "rodando" : ""}</span></summary><pre>${esc(it.output) || "sem saída"}</pre></details>`;
   if (it.kind === "todo") return `<div class="act"><ul class="todo">${it.items.map((t) => `<li class="${t.done ? "done" : ""}">${t.done ? "✓" : "○"} ${esc(t.text)}</li>`).join("")}</ul></div>`;
   return "";
 }
 const QUIET = new Set(["think", "cmd", "tool", "files"]);
 const running = (it) => (it.kind === "cmd" ? it.exit == null && it.status !== "failed" : it.status === "in_progress");
 // uma linha que conta o que foi feito; enquanto algo roda, mostra o que é
-function groupLabel(g) {
-  const live = g.findLast((it) => running(it));
-  if (live) return live.kind === "cmd" ? `Rodando ${live.command.split("\n")[0]}` : live.kind === "files" ? `Editando ${live.changes.map((c) => base(c.path)).join(", ")}` : `${live.name} ${live.detail}`;
+const stepLabel = (it) => (it.kind === "cmd" ? it.desc || it.command.split("\n")[0] : it.kind === "files" ? `Editando ${it.changes.map((c) => base(c.path)).join(", ")}` : it.kind === "tool" ? `${it.name} ${it.detail}` : "Pensando");
+function groupLabel(g, live) {
+  const now = g.findLast((it) => running(it)) || (live ? g.at(-1) : null);
+  if (now) return stepLabel(now);
   const n = { cmd: 0, files: 0, read: 0, search: 0, web: 0, tool: 0 };
   for (const it of g) {
     if (it.kind === "cmd") n.cmd++;
@@ -836,8 +853,8 @@ function groupLabel(g) {
   const text = said.length ? said.join(", ") : "pensou";
   return text[0].toUpperCase() + text.slice(1) + (failed ? ` · ${plural(failed, "falhou", "falharam")}` : "");
 }
-function groupHtml(g, key, i) {
-  return `<details class="acts" data-key="${esc(key)}" ${openActs.has(key) ? "open" : ""}><summary><span class="lbl">${esc(groupLabel(g))}</span></summary><div class="in">${g.map((it) => itemHtml(it, `${i}:${it.k}`)).join("")}</div></details>`;
+function groupHtml(g, key, i, live) {
+  return `<details class="acts" data-key="${esc(key)}" ${openActs.has(key) ? "open" : ""}><summary><span class="lbl">${esc(groupLabel(g, live))}</span>${g.length > 1 && live ? `<span class="cnt">${g.filter((x) => x.kind !== "think").length} passos</span>` : ""}</summary><div class="in">${g.map((it) => itemHtml(it, `${i}:${it.k}`)).join("")}</div></details>`;
 }
 // o que a pessoa colou vem com buracos; o aviso de interrupção do CLI não é fala dela
 const tidy = (t) => String(t || "").replace(/\n{3,}/g, "\n\n").trim();
@@ -857,7 +874,7 @@ function msgParts(m, i) {
   const parts = [["who", `<div class="who">${m.review ? `<span class="tag ok">Revisão</span>` : ""}<b>${esc(accName(acc(m.accountId)))}</b>${m.state === "working" ? "" : `<span class="num">${dur(took)}</span>`}${m.tokens ? `<span class="num" title="${esc(tokTitle(m.tokens))}">${tok(m.tokens.in + m.tokens.out + m.tokens.cache)} tokens</span>` : ""}${m.brain?.length ? `<span class="b" title="${esc(m.brain.join("\n"))}">${plural(m.brain.length, "nota", "notas")} do cérebro</span>` : ""}${m.state === "stopped" ? "<span>interrompido</span>" : ""}</div>`]];
   // raciocínio, comandos, arquivos e ferramentas seguidos viram um grupo só
   let group = [];
-  const flush = () => { if (group.length) parts.push([`g:${group[0].k}`, groupHtml(group, `${i}:g:${group[0].k}`, i)]); group = []; };
+  const flush = (live) => { if (group.length) parts.push([`g:${group[0].k}`, groupHtml(group, `${i}:g:${group[0].k}`, i, live)]); group = []; };
   for (const it of items) {
     if (it.kind === "think" && !it.text.trim()) continue;
     if (pending.some((a) => same(a, it))) continue;
@@ -867,7 +884,7 @@ function msgParts(m, i) {
     const h = itemHtml(it, `${i}:${it.k}`);
     if (h) parts.push([it.k, h]);
   }
-  flush();
+  flush(m.state === "working"); // o último grupo de uma resposta em andamento é o que está acontecendo agora
   const tail = ""
     + (m.state === "working" ? (m.items?.some((i) => i.kind === "ask" && i.state === "pending") ? `<div class="working" style="color:var(--amber)"><i style="background:var(--amber)"></i>esperando você</div>` : `<div class="working"><i></i>trabalhando há <span class="num" data-since="${m.at}"></span></div>`) : "")
     + (m.error ? `<div class="sys red">${esc(m.error)}</div>` : "")
