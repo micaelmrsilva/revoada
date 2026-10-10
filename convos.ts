@@ -18,6 +18,11 @@ export type Attachment = { id: string; name: string; path: string; image: boolea
 export type Usage = { key: string; pct: number; resetsAt: number };
 // o que a resposta custou em tokens, pelo que o próprio CLI informa (cache = entrada relida mais barata)
 export type Tokens = { in: number; out: number; cache: number; usd?: number };
+// quanto da janela de contexto a conversa ocupa depois desta resposta (e o tamanho da janela, quando o CLI informa)
+export type Ctx = { used: number; window?: number };
+// esforço de raciocínio que cada provedor aceita; modelo é o nome ou apelido que o CLI dele entende
+export const EFFORTS: Record<string, string[]> = { claude: ["low", "medium", "high", "xhigh", "max"], codex: ["low", "medium", "high"] };
+export const validModel = (m: unknown): m is string => typeof m === "string" && /^[A-Za-z0-9][\w.:\/\[\]@-]{0,79}$/.test(m); // começa por letra ou número: nunca tem cara de opção
 export type Item =
   | { k: string; kind: "text"; text: string }
   | { k: string; kind: "think"; text: string }
@@ -31,15 +36,19 @@ export type Msg = {
   role: "user" | "assistant"; at: number; text?: string; items?: Item[]; accountId?: string; attachments?: Attachment[];
   state?: "working" | "done" | "error" | "stopped"; error?: string; endedAt?: number; brain?: string[];
   tokens?: Tokens;
+  ctx?: Ctx;
+  model?: string;      // modelo que respondeu de fato, como o CLI informou
   review?: boolean;    // resposta de outra conta revisando o trabalho desta conversa
 };
 // mensagem escrita enquanto o agente respondia: entra sozinha quando ele terminar
-export type Queued = { text: string; at: number; target?: string; mode?: Mode; brain?: boolean; attachments?: Attachment[] };
+export type Queued = { text: string; at: number; target?: string; mode?: Mode; brain?: boolean; attachments?: Attachment[]; model?: string | null; effort?: string | null };
 export type Convo = {
   id: string; title: string; cwd: string; target: string; mode: Mode; brain: boolean;
   accountId: string | null; provider: string; native: { accountId: string; sessionId: string } | null;
   messages: Msg[]; working: boolean; at: number; rev: number;
   queue?: Queued[];
+  model?: string;      // escolhidos pelo usuário para as próximas respostas; sem valor, vale o padrão da conta
+  effort?: string;
   waiting?: boolean;   // parado esperando o usuário permitir ou negar algo
   allow?: string[];    // ferramentas que o usuário mandou permitir sempre nesta conversa
   titled?: boolean;    // já tem título de verdade (gerado ou digitado)
@@ -56,8 +65,10 @@ type Sink = {
   usage: (windows: Usage[]) => void;
   ask: (req: string, tool: string, input: any) => void;
   tokens: (t: Tokens) => void;
+  ctx: (c: Partial<Ctx>) => void;
+  model: (name: string) => void;
 };
-type RunOpts = { prompt: string; ctx?: string; resume: string | null; mode: Mode; dirs: string[]; files: Attachment[] };
+type RunOpts = { prompt: string; ctx?: string; resume: string | null; mode: Mode; dirs: string[]; files: Attachment[]; model?: string; effort?: string };
 type Adapter = {
   args: (o: RunOpts) => string[];
   // CLI que conversa pela entrada padrão: o pedido vai por aqui e as permissões voltam por aqui
@@ -75,13 +86,14 @@ const withFiles = (prompt: string, files: Attachment[]) => (files.length ? `${pr
 const CODEX_SANDBOX = { read: "read-only", ask: "workspace-write", edit: "workspace-write", full: "danger-full-access" };
 const ADAPTERS: Record<string, Adapter> = {
   codex: {
-    args: ({ prompt, ctx, resume, mode, dirs, files }) => {
+    args: ({ prompt, ctx, resume, mode, dirs, files, model, effort }) => {
       const images = files.filter((f) => f.image), rest = files.filter((f) => !f.image);
+      const pick = [...(model ? ["-m", model] : []), ...(effort ? ["-c", `model_reasoning_effort="${effort}"`] : [])];
       const text = withFiles(resume ? prompt : inline(prompt, ctx), rest);
       // o pedido vai antes das imagens: a flag -i aceita vários valores e engoliria o texto
       return resume
-        ? ["exec", "resume", resume, "--json", "--skip-git-repo-check", "-c", `sandbox_mode="${CODEX_SANDBOX[mode]}"`, text, ...images.flatMap((f) => ["-i", f.path])]
-        : ["exec", "--json", "--skip-git-repo-check", "-s", CODEX_SANDBOX[mode], ...dirs.flatMap((d) => ["--add-dir", d]), text, ...images.flatMap((f) => ["-i", f.path])];
+        ? ["exec", "resume", resume, "--json", "--skip-git-repo-check", "-c", `sandbox_mode="${CODEX_SANDBOX[mode]}"`, ...pick, text, ...images.flatMap((f) => ["-i", f.path])]
+        : ["exec", "--json", "--skip-git-repo-check", "-s", CODEX_SANDBOX[mode], ...pick, ...dirs.flatMap((d) => ["--add-dir", d]), text, ...images.flatMap((f) => ["-i", f.path])];
     },
     parse(ev, s) {
       if (ev.type === "thread.started") return s.session(ev.thread_id);
@@ -106,7 +118,8 @@ const ADAPTERS: Record<string, Adapter> = {
   },
   claude: {
     canAsk: true,
-    args: ({ ctx, resume, mode, dirs }) => ["-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose", "--include-partial-messages",
+    args: ({ ctx, resume, mode, dirs, model, effort }) => ["-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose", "--include-partial-messages",
+      ...(model ? ["--model", model] : []), ...(effort ? ["--effort", effort] : []),
       ...(resume ? ["--resume", resume] : []), ...(ctx ? ["--append-system-prompt", ctx] : []),
       ...(mode === "ask" ? ["--permission-prompt-tool", "stdio"] : mode === "edit" ? ["--permission-mode", "acceptEdits"] : mode === "full" ? ["--dangerously-skip-permissions"] : []),
       "--add-dir", ...dirs], // variádica: fica por último
@@ -123,7 +136,7 @@ const ADAPTERS: Record<string, Adapter> = {
     allow: (req, input) => JSON.stringify({ type: "control_response", response: { subtype: "success", request_id: req, response: { behavior: "allow", updatedInput: input } } }) + "\n",
     deny: (req) => JSON.stringify({ type: "control_response", response: { subtype: "success", request_id: req, response: { behavior: "deny", message: "O usuário negou esta ação. Não tente de novo do mesmo jeito; explique o que precisava ou siga por outro caminho." } } }) + "\n",
     parse(ev, s, st) {
-      if (ev.type === "system" && ev.subtype === "init") return s.session(ev.session_id);
+      if (ev.type === "system" && ev.subtype === "init") { if (typeof ev.model === "string") s.model(ev.model); return s.session(ev.session_id); }
       if (ev.type === "rate_limit_event") {
         const w = ev.rate_limit_info?.unifiedWindows || {};
         return s.usage(Object.entries<any>(w).map(([key, v]) => ({ key, pct: Math.round((v.utilization || 0) * 100), resetsAt: (v.resetsAt || 0) * 1000 })));
@@ -139,12 +152,18 @@ const ADAPTERS: Record<string, Adapter> = {
       }
       if (ev.type === "result") {
         if (ev.session_id) s.session(ev.session_id);
+        // a maior janela entre os modelos usados é a do modelo principal (os auxiliares são menores)
+        const win = Math.max(0, ...Object.values<any>(ev.modelUsage || {}).map((m) => Number(m?.contextWindow) || 0));
+        if (win) s.ctx({ window: win });
         const u = ev.usage;
         if (u) s.tokens({ in: (u.input_tokens || 0) + (u.cache_creation_input_tokens || 0), out: u.output_tokens || 0, cache: u.cache_read_input_tokens || 0, ...(typeof ev.total_cost_usd === "number" ? { usd: ev.total_cost_usd } : {}) });
         return ev.is_error ? s.fail(typeof ev.result === "string" && ev.result ? ev.result : ev.subtype || "o agente falhou") : s.done();
       }
       const blocks: any[] = Array.isArray(ev.message?.content) ? ev.message.content : [];
       if (ev.type === "assistant") {
+        // o que esta chamada leu é o tamanho da conversa agora; chamada de subagente tem janela própria e não conta
+        const use = ev.message?.usage;
+        if (use && !ev.parent_tool_use_id) s.ctx({ used: (use.input_tokens || 0) + (use.cache_read_input_tokens || 0) + (use.cache_creation_input_tokens || 0) + (use.output_tokens || 0) });
         st.seen ||= {};
         for (const b of blocks) {
           // cada bloco completo fecha o que veio aos pedaços na mesma posição
@@ -170,7 +189,7 @@ const ADAPTERS: Record<string, Adapter> = {
     },
   },
   gemini: {
-    args: ({ prompt, ctx, resume, mode, dirs, files }) => ["-p", withFiles(resume ? prompt : inline(prompt, ctx), files), "--output-format", "stream-json",
+    args: ({ prompt, ctx, resume, mode, dirs, files, model }) => ["-p", withFiles(resume ? prompt : inline(prompt, ctx), files), "--output-format", "stream-json", ...(model ? ["-m", model] : []),
       ...(resume ? ["--resume", resume] : []), ...(mode === "edit" || mode === "ask" ? ["--approval-mode", "auto_edit"] : mode === "full" ? ["--approval-mode", "yolo"] : []),
       ...dirs.flatMap((d) => ["--include-directories", d])],
     parse(ev, s) {
@@ -278,7 +297,10 @@ export function createConvos(d: {
     // o agente que não sabe perguntar roda como "pode editar", e a conversa avisa
     const mode: Mode = force || (c.mode === "ask" && !adapter.canAsk ? "edit" : c.mode);
     if (!force && c.mode === "ask" && !adapter.canAsk && attempt === 0) items.push({ k: `note:ask:${items.length}`, kind: "note", text: "Este agente não pede permissão passo a passo. Rodando como \"pode editar\": mexe só na pasta de trabalho.", tone: "mute" });
-    const opts: RunOpts = { prompt, ctx, resume, mode, dirs: [d.vault, ...(files.length ? [d.attachDir] : [])], files };
+    // revisão roda no padrão da conta do revisor; a escolha da conversa vale para o provedor dela
+    const mine = !force;
+    const effort = mine && c.effort && EFFORTS[acc.provider]?.includes(c.effort) ? c.effort : undefined;
+    const opts: RunOpts = { prompt, ctx, resume, mode, dirs: [d.vault, ...(files.length ? [d.attachDir] : [])], files, model: mine ? c.model : undefined, effort };
     const proc = Bun.spawn([bin, ...adapter.args(opts)], {
       cwd: c.cwd, env: { ...d.envFor(acc), TERM: "dumb", NO_COLOR: "1" }, stdin: adapter.stdin ? "pipe" : "ignore", stdout: "pipe", stderr: "pipe",
     });
@@ -301,6 +323,8 @@ export function createConvos(d: {
       fail: (m) => { failure = m; closeIn(); },
       done: () => { finished = true; closeIn(); },
       usage: (w) => d.onUsage(acc, w),
+      ctx: (x) => { msg.ctx = { used: x.used ?? msg.ctx?.used ?? 0, ...(x.window ?? msg.ctx?.window ? { window: x.window ?? msg.ctx?.window } : {}) }; touch(c); },
+      model: (name) => { msg.model = name; },
       // uma resposta pode passar por mais de uma conta (rodízio): soma
       tokens: (t) => { const m = (msg.tokens ||= { in: 0, out: 0, cache: 0 }); m.in += t.in; m.out += t.out; m.cache += t.cache; if (t.usd != null) m.usd = (m.usd || 0) + t.usd; },
       ask(req, tool, input) {
@@ -488,13 +512,19 @@ Responda em português, com uma lista numerada do mais grave para o menos. Cada 
     return msg;
   }
 
-  function send(c: Convo, text: string, patch: { target?: string; mode?: Mode; brain?: boolean; attachments?: Attachment[] } = {}) {
+  function send(c: Convo, text: string, patch: { target?: string; mode?: Mode; brain?: boolean; attachments?: Attachment[]; model?: string | null; effort?: string | null } = {}) {
     if (c.working) {
-      (c.queue ||= []).push({ text, at: Date.now(), target: patch.target, mode: patch.mode, brain: patch.brain, attachments: patch.attachments?.length ? patch.attachments : undefined });
+      (c.queue ||= []).push({ text, at: Date.now(), target: patch.target, mode: patch.mode, brain: patch.brain, attachments: patch.attachments?.length ? patch.attachments : undefined, model: patch.model, effort: patch.effort });
       touch(c);
       return "queued" as const;
     }
+    // modelo e esforço são do provedor: trocou de provedor sem escolher de novo, volta ao padrão
+    const provider = patch.target ? (patch.target.startsWith("pool:") ? patch.target.slice(5) : d.account(patch.target)?.provider) : c.provider;
+    if (provider && c.provider && provider !== c.provider) { delete c.model; delete c.effort; }
     if (patch.target) c.target = patch.target;
+    // null limpa a escolha (volta ao padrão da conta); sem o campo, fica como estava
+    if (patch.model !== undefined) { if (patch.model) c.model = patch.model; else delete c.model; }
+    if (patch.effort !== undefined) { if (patch.effort) c.effort = patch.effort; else delete c.effort; }
     if (patch.mode) c.mode = patch.mode;
     if (typeof patch.brain === "boolean") c.brain = patch.brain;
     c.messages.push({ role: "user", at: Date.now(), text, attachments: patch.attachments?.length ? patch.attachments : undefined });
@@ -537,14 +567,14 @@ Responda em português, com uma lista numerada do mais grave para o menos. Cada 
     return () => { closed = true; clearTimeout(timer); watchers.get(id)?.delete(kick); if (!watchers.get(id)?.size) watchers.delete(id); };
   }
 
-  function create(o: { prompt: string; target: string; cwd: string; mode: Mode; brain: boolean; worktree?: Convo["worktree"]; attachments?: Attachment[] }) {
+  function create(o: { prompt: string; target: string; cwd: string; mode: Mode; brain: boolean; worktree?: Convo["worktree"]; attachments?: Attachment[]; model?: string | null; effort?: string | null }) {
     const c: Convo = {
       id: crypto.randomUUID().slice(0, 8), title: (o.prompt.split("\n")[0] || o.attachments?.[0]?.name || "Conversa").slice(0, 80), cwd: o.cwd, target: o.target, mode: o.mode, brain: o.brain,
       accountId: null, provider: o.target.startsWith("pool:") ? o.target.slice(5) : d.account(o.target)?.provider || "", native: null,
       messages: [], working: false, at: Date.now(), rev: 0, worktree: o.worktree,
     };
     convos.set(c.id, c);
-    send(c, o.prompt, { attachments: o.attachments });
+    send(c, o.prompt, { attachments: o.attachments, model: o.model, effort: o.effort });
     return c;
   }
 

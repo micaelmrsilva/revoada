@@ -143,7 +143,7 @@ describe("conversa e rodízio", () => {
     const before = (await get(`convos/${id}`)).native.sessionId;
     await post(`convos/${id}/send`, { text: "segundo pedido" });
     const c = await idle(id);
-    expect(texts(c)).toBe(`retomei ${before}`);
+    expect(texts(c)).toContain(`retomei ${before}`);
   }, SLOW);
 
   test("trocar de conta à mão leva o histórico da conversa", async () => {

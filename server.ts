@@ -5,7 +5,7 @@ import { homedir } from "os";
 import { basename, dirname, join, relative } from "path";
 import { createBrain } from "./brain";
 import { createClones } from "./clones";
-import { createConvos, type Attachment, type Mode, type Usage } from "./convos";
+import { createConvos, EFFORTS, validModel, type Attachment, type Mode, type Usage } from "./convos";
 import { createHistory } from "./history";
 import { createRemote } from "./remote";
 import { readOnlyTool } from "./safe";
@@ -559,6 +559,9 @@ const convos = createConvos({
     startReview(c).catch(() => {});
   },
 });
+// modelo e esforço vindos da página: texto válido fica, null ou vazio limpa a escolha, o resto é ignorado
+const asModel = (m: unknown) => (m === null || m === "" ? null : validModel(m) ? m : undefined);
+const asEffort = (e: unknown) => (e === null || e === "" ? null : typeof e === "string" && Object.values(EFFORTS).some((l) => l.includes(e)) ? e : undefined);
 const asMode = (m: unknown): Mode => (m === "read" || m === "full" || m === "ask" ? m : "edit");
 // só aceita anexo que este servidor gravou
 const asAttachments = (list: unknown): Attachment[] => (Array.isArray(list) ? list : []).filter((a) => a && typeof a.path === "string" && a.path.startsWith(ATTACH + "/") && existsSync(a.path)).slice(0, 10);
@@ -720,7 +723,7 @@ async function state(refresh: boolean) {
   if (refresh || stale.some((a) => !statusCache.has(a.id))) await Promise.all(pending);
   return {
     home: HOME, projects: PROJECTS,
-    providers: Object.entries(PROVIDERS).map(([id, p]) => ({ id, name: p.name, installed: !!binPath(id) })),
+    providers: Object.entries(PROVIDERS).map(([id, p]) => ({ id, name: p.name, installed: !!binPath(id), efforts: EFFORTS[id] || [] })),
     accounts: accounts.map((a) => ({
       id: a.id, provider: a.provider, label: a.label, isolated: !!a.home, envKeys: Object.keys(a.env || {}),
       status: statusCache.get(a.id) || { ok: false, detail: "verificando" },
@@ -804,7 +807,7 @@ const server = Bun.serve({
         if (!prompt && !asAttachments(body.attachments).length) return fail("escreva o pedido");
         let wt: (Worktree & { cwd: string }) | undefined;
         if (body.isolate) { try { wt = await makeWorktree(cwd, prompt); } catch (e: any) { return fail(e.message); } }
-        return json({ kind: "chat", id: convos.create({ prompt, target: targets[0], cwd: wt?.cwd || cwd, mode: asMode(body.mode), brain: body.brain !== false, worktree: wt && { main: wt.main, path: wt.path, branch: wt.branch }, attachments: asAttachments(body.attachments) }).id });
+        return json({ kind: "chat", id: convos.create({ prompt, target: targets[0], cwd: wt?.cwd || cwd, mode: asMode(body.mode), brain: body.brain !== false, worktree: wt && { main: wt.main, path: wt.path, branch: wt.branch }, attachments: asAttachments(body.attachments), model: asModel(body.model), effort: asEffort(body.effort) }).id });
       }
       const ctx = prompt && body.brain !== false ? await brain.context(prompt, cwd.split("/").pop()) : null;
       if (targets.length > 1) {
@@ -875,7 +878,7 @@ const server = Bun.serve({
         const text = String(body.text || "").trim();
         if (!text && !asAttachments(body.attachments).length) return fail("escreva a mensagem");
         await Promise.all(accounts.filter((a) => !statusCache.has(a.id)).map(refreshStatus));
-        try { return json({ ok: true, queued: convos.send(c, text, { target: typeof body.target === "string" ? body.target : undefined, mode: body.mode ? asMode(body.mode) : undefined, brain: typeof body.brain === "boolean" ? body.brain : undefined, attachments: asAttachments(body.attachments) }) === "queued" }); }
+        try { return json({ ok: true, queued: convos.send(c, text, { target: typeof body.target === "string" ? body.target : undefined, mode: body.mode ? asMode(body.mode) : undefined, brain: typeof body.brain === "boolean" ? body.brain : undefined, attachments: asAttachments(body.attachments), model: asModel(body.model), effort: asEffort(body.effort) }) === "queued" }); }
         catch (e: any) { return fail(e.message); }
       }
       // a página pergunta com a revisão que já tem: sem mudança, resposta curta
