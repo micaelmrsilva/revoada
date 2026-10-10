@@ -120,6 +120,7 @@
   .strip { display: flex; gap: 6px; align-items: center; padding: 0 16px; height: 38px; background: var(--side); border: 1px solid var(--line); border-bottom: 0; border-radius: 16px 16px 0 0; margin: 0 12px; color: var(--mute); font-size: 13px; }
   .chip { display: inline-flex; align-items: center; gap: 7px; padding: 4px 9px; border-radius: 8px; color: var(--mute); font-size: 13px; white-space: nowrap; }
   .chip:hover { background: var(--soft); color: var(--text); }
+  .strip { min-width: 0; } .strip #dirChip { min-width: 0; flex: 0 1 auto; } .strip #dirChip span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
   .chip.on { color: var(--teal); }
   .strip .notes { margin-left: auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12.5px; color: var(--faint); min-width: 0; }
   .box { background: var(--bg); border: 1px solid var(--line); border-radius: 20px; box-shadow: var(--shadow); padding: 14px 14px 10px 18px; }
@@ -464,6 +465,8 @@ const accName = (a) => (a ? `${prov(a.provider).name} · ${a.label}` : "conta re
 const ready = (a) => a.status.ok && !a.limit;
 const short = (p) => p.replace(S.home, "~");
 const base = (p) => p.split("/").filter(Boolean).pop() || "/";
+// caminho comprido (pasta temporária, cópia isolada) aparece pelo fim, que é a parte que identifica
+const brief = (p) => { if (p.length <= 46) return p; const parts = p.split("/").filter(Boolean), tail = parts.slice(-2).join("/"); return `…/${tail.length <= 60 ? tail : parts.at(-1)}`; };
 const cwd = () => $("cwd").value.trim();
 
 // ---------- ajustes ----------
@@ -672,7 +675,9 @@ const targetName = (t) => (t.startsWith("pool:") ? prov(t.slice(5)).name : accNa
 function paintComposer() {
   const inChat = view.type === "chat", busy = inChat && chat?.working;
   $("heroDir").textContent = base(cwd() || "~");
-  $("dirChip").innerHTML = `${ICON.folder}${esc(short(inChat && chat ? chat.cwd : cwd()))}`;
+  const dir = short(inChat && chat ? chat.cwd : cwd());
+  $("dirChip").innerHTML = `${ICON.folder}<span>${esc(brief(dir))}</span>`;
+  $("dirChip").title = dir;
   $("dirChip").disabled = inChat;
   $("prompt").placeholder = !inChat ? "Peça qualquer coisa" : chat?.waiting ? "Enter permite, Esc nega. Ou escreva a próxima mensagem" : busy ? "Escreva a próxima: entra quando o agente terminar" : "Responder";
   const ts = targets();
@@ -927,7 +932,7 @@ function renderChat() {
   if (stick) box.scrollTop = box.scrollHeight;
   const a = acc(chat.accountId);
   $("chTitle").textContent = chat.title;
-  $("chSub").textContent = `${a ? accName(a) : targetName(chat.target)} · ${chat.worktree ? `cópia isolada de ${base(chat.worktree.main)}, branch ${chat.worktree.branch}` : short(chat.cwd)}${chat.native ? "" : chat.messages.length > 2 ? " · próxima resposta leva o histórico" : ""}`;
+  $("chSub").textContent = `${a ? accName(a) : targetName(chat.target)} · ${chat.worktree ? `cópia isolada de ${base(chat.worktree.main)}, branch ${chat.worktree.branch}` : brief(short(chat.cwd))}${chat.native ? "" : chat.messages.length > 2 ? " · próxima resposta leva o histórico" : ""}`;
   const acts = `<button class="link" id="seeDiff" title="O que mudou nos arquivos desta pasta">Mudanças</button>` + (chat.working ? "" : `<button class="link" id="askReview" title="Uma conta de outro provedor lê o que mudou, sem editar nada, e aponta defeitos">Revisar</button>`) + (chat.worktree && !chat.working ? `<button class="link" id="mkPr" title="Pede ao agente para fazer commit, push e abrir o PR. Com o PR aberto e nada pendente, a cópia some sozinha.">Criar PR</button>` : "");
   if ($("chActs").innerHTML !== acts) $("chActs").innerHTML = acts;
   paintComposer();

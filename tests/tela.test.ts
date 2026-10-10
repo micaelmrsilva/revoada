@@ -19,7 +19,9 @@ let seq = 0;
 const waiting = new Map<number, (m: any) => void>();
 const cdp = (method: string, params: object = {}, sid = session) => new Promise<any>((resolve, reject) => {
   const id = ++seq;
-  waiting.set(id, (m) => (m.error ? reject(new Error(`${method}: ${m.error.message}`)) : resolve(m.result)));
+  // sem resposta em 20 s é defeito: melhor falhar com o nome do comando do que travar a bateria inteira
+  const timer = setTimeout(() => { waiting.delete(id); reject(new Error(`${method}: o Chrome não respondeu`)); }, 20_000);
+  waiting.set(id, (m) => { clearTimeout(timer); m.error ? reject(new Error(`${method}: ${m.error.message}`)) : resolve(m.result); });
   ws.send(JSON.stringify({ id, method, params, ...(sid ? { sessionId: sid } : {}) }));
 });
 // roda um trecho de código na página e devolve o valor
@@ -36,7 +38,7 @@ const key = (k: string) => `document.querySelector("#prompt").focus(); document.
 
 describe.skipIf(!CHROME)("tela", () => {
   beforeAll(async () => {
-    env = await sobe(5000 + Math.floor(Math.random() * 90));
+    env = await sobe(5200 + Math.floor(Math.random() * 90)); // 5000 e 7000 são do AirPlay no macOS
     profile = mkdtempSync(join(tmpdir(), "revoada-chrome-"));
     chrome = Bun.spawn([CHROME!, "--headless=new", "--remote-debugging-port=0", `--user-data-dir=${profile}`, "--no-first-run", "--no-default-browser-check", "--disable-gpu", "--no-sandbox", "--window-size=1280,860", "about:blank"], { stdout: "ignore", stderr: "pipe" });
     // o Chrome avisa no erro padrão em que endereço atende o protocolo de depuração
@@ -100,6 +102,24 @@ describe.skipIf(!CHROME)("tela", () => {
     expect(r.text).toBe((await env.api(`convos/${id}`)).messages.at(-1).items.at(-1).text.length);
   }, SLOW);
 
+  test("pasta de caminho comprido não vaza do campo de pedido nem do cabeçalho", async () => {
+    const deep = join(env.home, "Library/Application Support/Claude/scratch-workspaces/d1ab563f-8797-4857-88c3-13efdc7aa9e9/7fc5e0b6-8b05-47a9-95dd-89f14c5f7129/scratch-2026-10-07-bf0031");
+    require("fs").mkdirSync(deep, { recursive: true });
+    const id = await env.chat("claude-padrao", "oi", { cwd: deep });
+    await env.idle(id);
+    await page(`go({ type: "chat", id: "${id}" });`);
+    await until(`chat && chat.id === "${id}" && document.querySelector("#dirChip span")`);
+    const measure = `const chip = document.querySelector("#dirChip"), strip = chip.parentElement.getBoundingClientRect(), sub = document.querySelector("#chSub").getBoundingClientRect();
+      return { fits: chip.getBoundingClientRect().right <= strip.right + 1, header: sub.right <= innerWidth, page: document.documentElement.scrollWidth <= innerWidth, text: chip.innerText.trim(), full: chip.title.endsWith("scratch-2026-10-07-bf0031") };`;
+    expect(await page(measure)).toEqual({ fits: true, header: true, page: true, text: "…/scratch-2026-10-07-bf0031", full: true });
+    // na menor janela que o app permite (920 de largura) continua cabendo
+    await cdp("Emulation.setDeviceMetricsOverride", { width: 920, height: 700, deviceScaleFactor: 1, mobile: false });
+    await Bun.sleep(150);
+    const small = await page(measure);
+    await cdp("Emulation.setDeviceMetricsOverride", { width: 1280, height: 860, deviceScaleFactor: 1, mobile: false });
+    expect([small.fits, small.header, small.page]).toEqual([true, true, true]);
+  }, SLOW);
+
   test("Esc nega, e o cartão de negado com comando comprido não alarga a conversa", async () => {
     const id = await env.chat("claude-padrao", "DEMO-RICA: nega esta", { mode: "ask" });
     await page(`go({ type: "chat", id: "${id}" });`);
@@ -118,7 +138,10 @@ describe.skipIf(!CHROME)("tela", () => {
     const negada = await env.chat("claude-padrao", "DEMO-RICA: webkit nega", { mode: "ask" });
     const w = await env.until(async () => { const c = await env.api(`convos/${negada}`); return c.waiting && c; });
     await env.api(`convos/${negada}/decide`, "POST", { req: w.messages.at(-1).items.find((i: any) => i.kind === "ask").req, decision: "deny" });
-    await env.idle(rica); await env.idle(negada);
+    const deep = join(env.home, "Library/Application Support/Claude/scratch-workspaces/d1ab563f-8797-4857-88c3-13efdc7aa9e9/7fc5e0b6-8b05-47a9-95dd-89f14c5f7129/scratch-webkit");
+    require("fs").mkdirSync(deep, { recursive: true });
+    const funda = await env.chat("claude-padrao", "oi", { cwd: deep });
+    await env.idle(rica); await env.idle(negada); await env.idle(funda);
     const js = `
       const wait = async (f) => { for (let i = 0; i < 200; i++) { const v = f(); if (v) return v; await new Promise((r) => setTimeout(r, 60)); } throw new Error("esperei demais"); };
       const measure = () => { const w = document.querySelector("#msgs"), edge = w.getBoundingClientRect().right; return [Math.round(Math.max(0, ...[...w.querySelectorAll("*")].map((e) => e.getBoundingClientRect().right - edge))), document.querySelector("#chatScroll").scrollWidth - document.querySelector("#chatScroll").clientWidth, Math.round(w.getBoundingClientRect().width)]; };
@@ -130,10 +153,15 @@ describe.skipIf(!CHROME)("tela", () => {
       const a = measure(), alive = live.es.readyState;
       go({ type: "chat", id: "${negada}" });
       await wait(() => chat && chat.id === "${negada}" && !chat.working && document.querySelector("#msgs .askcard.done"));
-      return JSON.stringify({ rica: a, negada: measure(), live: alive, webkit: /AppleWebKit/.test(navigator.userAgent) && !/Chrome/.test(navigator.userAgent) });`;
+      const b = measure();
+      go({ type: "chat", id: "${funda}" });
+      await wait(() => chat && chat.id === "${funda}" && document.querySelector("#dirChip span"));
+      const chip = document.querySelector("#dirChip");
+      const pasta = chip.getBoundingClientRect().right <= chip.parentElement.getBoundingClientRect().right + 1 && document.documentElement.scrollWidth <= innerWidth;
+      return JSON.stringify({ rica: a, negada: b, pasta, live: alive, webkit: /AppleWebKit/.test(navigator.userAgent) && !/Chrome/.test(navigator.userAgent) });`;
     const run = Bun.spawnSync(["swift", join(import.meta.dir, "webkit.swift"), env.origin, js], { stdout: "pipe", stderr: "pipe" });
     if (run.exitCode !== 0) throw new Error(run.stderr.toString().slice(-800));
-    expect(JSON.parse(run.stdout.toString())).toEqual({ rica: [0, 0, 760], negada: [0, 0, 760], live: 1, webkit: true });
+    expect(JSON.parse(run.stdout.toString())).toEqual({ rica: [0, 0, 760], negada: [0, 0, 760], pasta: true, live: 1, webkit: true });
   }, 90_000);
 
   test("pedido de permissão mostra o comando uma vez; Enter com texto põe na fila, Enter vazio permite", async () => {
