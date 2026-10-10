@@ -56,7 +56,7 @@ describe.skipIf(!CHROME)("tela", () => {
     await cdp("Emulation.setDeviceMetricsOverride", { width: 1280, height: 860, deviceScaleFactor: 1, mobile: false });
     await cdp("Page.enable");
     await cdp("Page.navigate", { url: env.origin });
-    await until(`typeof go === "function" && typeof S === "object" && S && S.accounts`);
+    await until(`typeof go === "function" && typeof S === "object" && S && S.convos`);
   }, SLOW);
 
   afterAll(async () => {
@@ -405,7 +405,7 @@ describe.skipIf(!CHROME)("tela", () => {
     const js = `
       const wait = async (f) => { for (let i = 0; i < 200; i++) { const v = f(); if (v) return v; await new Promise((r) => setTimeout(r, 60)); } throw new Error("esperei demais"); };
       const measure = () => { const w = document.querySelector("#msgs"), edge = w.getBoundingClientRect().right; return [Math.round(Math.max(0, ...[...w.querySelectorAll("*")].map((e) => e.getBoundingClientRect().right - edge))), document.querySelector("#chatScroll").scrollWidth - document.querySelector("#chatScroll").clientWidth, Math.round(w.getBoundingClientRect().width)]; };
-      await wait(() => typeof go === "function" && typeof S === "object" && S && S.accounts);
+      await wait(() => typeof go === "function" && typeof S === "object" && S && S.convos);
       go({ type: "chat", id: "${rica}" });
       await wait(() => chat && chat.id === "${rica}" && !chat.working && document.querySelector("#msgs table"));
       document.querySelector("#msgs .acts > summary").click();
@@ -425,7 +425,7 @@ describe.skipIf(!CHROME)("tela", () => {
     // e com a janela em 600 de largura: nada passa da borda, e os botões do campo ficam só com o ícone
     const narrow = Bun.spawnSync(["swift", join(import.meta.dir, "webkit.swift"), env.origin, `
       const wait = async (f) => { for (let i = 0; i < 200; i++) { const v = f(); if (v) return v; await new Promise((r) => setTimeout(r, 60)); } throw new Error("esperei demais"); };
-      await wait(() => typeof go === "function" && typeof S === "object" && S && S.accounts);
+      await wait(() => typeof go === "function" && typeof S === "object" && S && S.convos);
       go({ type: "chat", id: "${rica}" });
       await wait(() => chat && chat.id === "${rica}" && document.querySelector("#msgs table"));
       await new Promise((r) => setTimeout(r, 200));

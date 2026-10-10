@@ -5,7 +5,7 @@
 import { readFileSync, writeFileSync } from "fs";
 
 export type Column = "todo" | "doing" | "review" | "done";
-export type Card = { id: string; title: string; prompt: string; cwd: string; target: string; at: number; state: Column; convo?: string; note?: string; reviewed?: boolean };
+export type Card = { id: string; title: string; prompt: string; cwd: string; target: string; at: number; state: Column; convo?: string; note?: string; reviewed?: boolean; by?: string }; // by: conversa cujo agente criou o cartão
 type ConvoView = { working: boolean; waiting: boolean; lastState?: string; touchedFiles: boolean } | null;
 const COLUMNS: Column[] = ["todo", "doing", "review", "done"];
 
@@ -60,8 +60,8 @@ export function createBoard(o: {
       advance();
       return cards.map((c) => { const v = c.convo ? o.convo(c.convo) : null; return { ...c, working: !!v?.working || reviewing.has(c.id) || starting.has(c.id), waiting: !!v?.waiting }; });
     },
-    add(input: { prompt: string; cwd: string; target: string; title?: string }) {
-      const c: Card = { id: crypto.randomUUID().slice(0, 8), title: (input.title || input.prompt.split("\n")[0]).trim().slice(0, 80), prompt: input.prompt, cwd: input.cwd, target: input.target, at: Date.now(), state: "todo" };
+    add(input: { prompt: string; cwd: string; target: string; title?: string; by?: string }) {
+      const c: Card = { id: crypto.randomUUID().slice(0, 8), title: (input.title || input.prompt.split("\n")[0]).trim().slice(0, 80), prompt: input.prompt, cwd: input.cwd, target: input.target, at: Date.now(), state: "todo", ...(input.by ? { by: input.by } : {}) };
       cards.push(c);
       save();
       return c;

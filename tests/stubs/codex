@@ -14,7 +14,24 @@ if (!home) {
 }
 const name = basename(home), resume = a[1] === "resume" ? a[2] : null;
 if (all.includes("CRIA-ARQUIVO")) writeFileSync("novo.txt", "feito pelo agente");
+let used = "";
+if (all.includes("USA-REVOADA")) {
+  const raw = a.find((x) => x.startsWith("mcp_servers.revoada="));
+  if (!raw) used = "sem-ponte";
+  else {
+    const cfg = (Bun.TOML.parse(`x = ${raw.slice("mcp_servers.revoada=".length)}`) as any).x;
+    const p = Bun.spawn([cfg.command, ...cfg.args], { env: { ...process.env, ...cfg.env }, stdin: "pipe", stdout: "pipe", stderr: "ignore" });
+    const lines = (async function* () { const dec = new TextDecoder(); let buf = ""; for await (const ch of p.stdout) { buf += dec.decode(ch, { stream: true }); for (let i; (i = buf.indexOf("\n")) >= 0; buf = buf.slice(i + 1)) yield buf.slice(0, i); } })();
+    const rpc = async (id: number, method: string, params: unknown) => { p.stdin.write(JSON.stringify({ jsonrpc: "2.0", id, method, params }) + "\n"); p.stdin.flush(); for (;;) { const n = await lines.next(); if (n.done) return undefined; const m = JSON.parse(n.value); if (m.id === id) return m.result; } };
+    await rpc(1, "initialize", { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "stub", version: "0" } });
+    const out: string[] = [];
+    let n = 2;
+    for (const line of all.split("\n")) { const m = line.match(/USA-REVOADA (\w+)\s*(\{.*\})?/); if (m) out.push(`${m[1]}: ${(await rpc(n++, "tools/call", { name: m[1], arguments: m[2] ? JSON.parse(m[2]) : {} }))?.content?.[0]?.text?.replace(/\s+/g, " ")}`); }
+    p.stdin.end();
+    used = out.join(" || ");
+  }
+}
 if (!resume) out({ type: "thread.started", thread_id: `t-${name}` });
 if (all.includes("CRIA-ARQUIVO")) out({ type: "item.completed", item: { id: "item_f", type: "file_change", changes: [{ path: "novo.txt", kind: "add" }], status: "completed" } });
-out({ type: "item.completed", item: { id: "item_0", type: "agent_message", text: resume ? `retomei ${resume}; modelo=${a.includes("-m") ? a[a.indexOf("-m") + 1] : "padrao"}; esforco=${all.match(/model_reasoning_effort="(\w+)"/)?.[1] || "padrao"}` : `nova; historico=${all.includes("<conversa-anterior>")}; viu-retomada=${all.includes("retomei")}; viu-comando=${all.includes("rodou: ls")}; cerebro=${all.includes("<contexto-do-cerebro>")}; modelo=${a.includes("-m") ? a[a.indexOf("-m") + 1] : "padrao"}; esforco=${all.match(/model_reasoning_effort="(\w+)"/)?.[1] || "padrao"}; imagens=${a.filter((x) => x === "-i").length}; mcp=${a.filter((x) => x.startsWith("mcp_servers.")).join("|") || "nao"}` } });
+out({ type: "item.completed", item: { id: "item_0", type: "agent_message", text: used ? used : resume ? `retomei ${resume}; modelo=${a.includes("-m") ? a[a.indexOf("-m") + 1] : "padrao"}; esforco=${all.match(/model_reasoning_effort="(\w+)"/)?.[1] || "padrao"}` : `nova; historico=${all.includes("<conversa-anterior>")}; viu-retomada=${all.includes("retomei")}; viu-comando=${all.includes("rodou: ls")}; cerebro=${all.includes("<contexto-do-cerebro>")}; modelo=${a.includes("-m") ? a[a.indexOf("-m") + 1] : "padrao"}; esforco=${all.match(/model_reasoning_effort="(\w+)"/)?.[1] || "padrao"}; imagens=${a.filter((x) => x === "-i").length}; revoada=${a.some((x) => x.startsWith("mcp_servers.revoada=")) ? "sim" : "nao"}; mcp=${a.filter((x) => x.startsWith("mcp_servers.") && !x.startsWith("mcp_servers.revoada=")).join("|") || "nao"}` } });
 out({ type: "turn.completed", usage: { input_tokens: 1200, cached_input_tokens: 1000, output_tokens: 30 } });

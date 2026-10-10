@@ -14,6 +14,11 @@ import { createBoard } from "./board";
 import { routable } from "./route";
 import { createTools } from "./tools";
 import { readOnlyTool } from "./safe";
+import { createHmac, timingSafeEqual } from "crypto";
+import { GUIDE } from "./agent-guide";
+
+// `--mcp`: este mesmo programa vira a ponte que os CLIs sobem para falar com a Revoada (ver mcp.ts)
+if (process.argv.includes("--mcp")) { await (await import("./mcp")).runMcp(); process.exit(0); }
 
 const HOME = homedir();
 const ROOT = process.env.REVOADA_HOME || join(HOME, ".revoada");
@@ -196,7 +201,7 @@ const stripAnsi = (s: string) => s
 // ---------- limite e rodízio ----------
 type Limit = { until: number; reason: string; at: number };
 let limits: Record<string, Limit> = readJson(LIMITS_FILE) || {};
-const settings: { rotate: boolean; teach: boolean; onboarded: boolean; autoClean: boolean; importChats: boolean; keepAwake: boolean; lidAwake: boolean; lidFreeze: boolean; autoReview: boolean; autoRead: boolean; suggest: boolean; shareTools: boolean; tidyBrain: boolean; remote: boolean; remoteSend: boolean ; sound: boolean } = { sound: true, autoRead: true, suggest: true, shareTools: false, tidyBrain: false, rotate: true, teach: false, onboarded: false, autoClean: false, importChats: false, keepAwake: true, lidAwake: false, lidFreeze: false, autoReview: false, remote: false, remoteSend: false, ...(readJson(SETTINGS_FILE) || {}) };
+const settings: { rotate: boolean; teach: boolean; onboarded: boolean; autoClean: boolean; importChats: boolean; keepAwake: boolean; lidAwake: boolean; lidFreeze: boolean; autoReview: boolean; autoRead: boolean; suggest: boolean; shareTools: boolean; tidyBrain: boolean; remote: boolean; remoteSend: boolean ; sound: boolean ; agentTools: boolean } = { agentTools: true, sound: true, autoRead: true, suggest: true, shareTools: false, tidyBrain: false, rotate: true, teach: false, onboarded: false, autoClean: false, importChats: false, keepAwake: true, lidAwake: false, lidFreeze: false, autoReview: false, remote: false, remoteSend: false, ...(readJson(SETTINGS_FILE) || {}) };
 // o que a janela nativa informa sobre a vigília (só existe no app desktop)
 let vigil: Record<string, unknown> | null = null;
 // consumo de cada conta nas janelas do provedor (5h, 7 dias), lido do que o próprio CLI informa
@@ -272,6 +277,44 @@ const account = (id: string) => accounts.find((a) => a.id === id);
 // ---------- skills e MCP em todas as contas ----------
 const tools = createTools({ home: HOME, root: ROOT });
 const extraArgs = (acc: { id: string; provider: string; home: string | null }) => (settings.shareTools ? tools.mcpArgs(acc) : []);
+
+// ---------- a Revoada como ferramenta dos agentes ----------
+// Cada conversa ganha uma credencial própria (assinada com um segredo desta máquina). A ponte MCP usa
+// essa credencial para chamar /agent/*, que só faz o que está na lista de ferramentas e aplica as travas.
+const AGENT_BUDGET = Number(process.env.REVOADA_AGENT_BUDGET || 8); // tarefas + delegações + agendamentos por conversa
+const AGENT_DIR = join(ROOT, "agentes");
+mkdirSync(AGENT_DIR, { recursive: true });
+const agentSecret = (() => {
+  const f = join(ROOT, "agent-secret");
+  try { const cur = readFileSync(f, "utf8").trim(); if (cur.length >= 32) return cur; } catch {}
+  const made = Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString("hex");
+  writeFileSync(f, made, { mode: 0o600 }); chmodSync(f, 0o600);
+  return made;
+})();
+const agentToken = (convoId: string) => `${convoId}.${createHmac("sha256", agentSecret).update(convoId).digest("hex")}`;
+function agentConvo(token: string) {
+  const id = token.split(".")[0], want = Buffer.from(agentToken(id)), got = Buffer.from(token);
+  return want.length === got.length && timingSafeEqual(want, got) ? id : null;
+}
+// como subir a ponte: no app é o próprio binário; em desenvolvimento, o bun com este arquivo
+const bridge = Bun.main.startsWith("/$bunfs") ? { command: process.execPath, args: ["--mcp"] } : { command: process.execPath, args: [Bun.main, "--mcp"] };
+function agentArgs(acc: { id: string; provider: string; home: string | null }, c: { id: string; by?: string }) {
+  const shared = extraArgs(acc);
+  if (!settings.agentTools || (acc.provider !== "claude" && acc.provider !== "codex")) return shared;
+  const env = { REVOADA_AGENT_URL: `http://127.0.0.1:${PORT}`, REVOADA_AGENT_TOKEN: agentToken(c.id) };
+  if (acc.provider === "codex") {
+    const q = JSON.stringify;
+    return [...shared, "-c", `mcp_servers.revoada={ command = ${q(bridge.command)}, args = [${bridge.args.map((a) => q(a)).join(", ")}], env = { REVOADA_AGENT_URL = ${q(env.REVOADA_AGENT_URL)}, REVOADA_AGENT_TOKEN = ${q(env.REVOADA_AGENT_TOKEN)} } }`];
+  }
+  // Claude: um arquivo por conversa (tem a credencial dentro: só o dono lê), junto do arquivo compartilhado
+  // se houver. As ferramentas da Revoada já são conferidas no servidor, então não pedem permissão a cada uso.
+  const file = join(AGENT_DIR, `${c.id}.json`);
+  const body = JSON.stringify({ mcpServers: { revoada: { command: bridge.command, args: bridge.args, env } } });
+  let cur = ""; try { cur = readFileSync(file, "utf8"); } catch {}
+  if (cur !== body) { writeFileSync(file, body, { mode: 0o600 }); chmodSync(file, 0o600); }
+  const others = shared[0] === "--mcp-config" ? shared.slice(1) : [];
+  return ["--mcp-config", ...others, file, "--allowedTools", "mcp__revoada"];
+}
 function shareTools(on: boolean) {
   const out = { linked: 0, removed: 0 };
   for (const a of accounts) {
@@ -582,7 +625,7 @@ const convos = createConvos({
   afterTurn: (a, sid) => { if (a.provider === "codex") readCodexUsage(a as Account, sid); },
   makeTitle,
   suggest: makeSuggestion,
-  extraArgs,
+  extraArgs: (acc, c) => agentArgs(acc as Account, c),
   account: (id) => (id ? account(id) : undefined),
   accName,
   binPath,
@@ -597,6 +640,7 @@ const convos = createConvos({
   autoAllow: (tool, input) => settings.autoRead && readOnlyTool(tool, input),
   // revisão automática: só quando a resposta mexeu em arquivo, e nunca revisão de revisão
   afterDone: (c, msg) => {
+    if (c.reviewAfter && !msg.review) { convos.mark(c.id, { reviewAfter: false }); startReview(c).catch(() => {}); return; }
     if (!settings.autoReview || msg.review || !msg.items?.some((i) => i.kind === "files")) return;
     startReview(c).catch(() => {});
   },
@@ -634,13 +678,13 @@ function applyRemote() {
 
 // ---------- pedidos agendados ----------
 const isTarget = (t: unknown): t is string => typeof t === "string" && (t.startsWith("pool:") ? !!PROVIDERS[t.slice(5)] : !!account(t));
-async function openChat(o: { prompt: string; target: string; cwd: string; mode: Mode; brain: boolean; isolate: boolean; title?: string }) {
+async function openChat(o: { prompt: string; target: string; cwd: string; mode: Mode; brain: boolean; isolate: boolean; title?: string; by?: string }) {
   const cwd = validCwd(o.cwd);
   if (!cwd) throw new Error("a pasta deste pedido não existe mais");
   if (!isTarget(o.target)) throw new Error("a conta deste pedido não existe mais");
   await Promise.all(accounts.filter((a) => !statusCache.has(a.id)).map(refreshStatus));
   const wt = o.isolate ? await makeWorktree(cwd, o.title || o.prompt) : undefined;
-  const c = convos.create({ prompt: o.prompt, target: o.target, cwd: wt?.cwd || cwd, mode: o.mode, brain: o.brain, worktree: wt && { main: wt.main, path: wt.path, branch: wt.branch } });
+  const c = convos.create({ prompt: o.prompt, target: o.target, cwd: wt?.cwd || cwd, mode: o.mode, brain: o.brain, worktree: wt && { main: wt.main, path: wt.path, branch: wt.branch }, by: o.by });
   if (o.title) convos.rename(c.id, o.title);
   return c;
 }
@@ -658,7 +702,7 @@ const convoView = (id: string) => {
 const board = createBoard({
   file: join(ROOT, "board.json"),
   // cada tarefa na sua cópia do repositório, quando a pasta é um repositório; fora disso, na própria pasta
-  launch: async (card) => (await openChat({ prompt: card.prompt, target: card.target, cwd: card.cwd, mode: "edit", brain: true, isolate: !!(await repoInfo(card.cwd)), title: card.title })).id,
+  launch: async (card) => (await openChat({ prompt: card.prompt, target: card.target, cwd: card.cwd, mode: "edit", brain: true, isolate: !!(await repoInfo(card.cwd)), title: card.title, by: card.by })).id,
   convo: convoView,
   review: async (id) => { const c = convos.get(id); if (c) await startReview(c); },
 });
@@ -798,7 +842,11 @@ async function startRun(prompt: string, targets: string[], cwd: string, edits: b
 
 // ---------- http ----------
 const json = (data: unknown, status = 200) => Response.json(data, { status });
-const fail = (msg: string, status = 400) => json({ error: msg }, status);
+// Todo erro sai com um código estável além da frase: a frase é pra gente ler, o código é pra agente e script.
+const CODES: [RegExp, string][] = [[/pasta .*não existe/i, "pasta_nao_existe"], [/nenhuma conta pronta|escolha (?:ao menos )?uma conta|escolha quem/i, "sem_conta_pronta"], [/ainda está (?:respondendo|trabalhando)/i, "agente_ocupado"],
+  [/não existe/i, "nao_existe"], [/escreva/i, "pedido_vazio"], [/no limite/i, "conta_no_limite"], [/repositório git/i, "nao_e_repositorio"], [/já foi/i, "ja_feito"]];
+const codeOf = (msg: string) => CODES.find(([re]) => re.test(msg))?.[1] || "invalido";
+const fail = (msg: string, status = 400, code = codeOf(msg)) => json({ error: msg, code }, status);
 
 function listDirs() {
   const base = PROJECTS;
@@ -863,12 +911,119 @@ function demoState(real: any) {
   };
 }
 
+// ---------- /agent/*: o que um agente pode pedir à Revoada ----------
+const nope = (code: string, message: string, status = 400) => json({ ok: false, code, message }, status);
+const AGENT_MODE: Record<string, Mode> = { read: "read", ask: "ask", edit: "edit", full: "edit" }; // quem é aberto por agente nunca ganha acesso total
+async function agentApi(req: Request, url: URL): Promise<Response> {
+  if (req.method !== "POST") return nope("invalido", "use POST", 405);
+  const id = agentConvo((req.headers.get("authorization") || "").replace(/^Bearer\s+/i, ""));
+  const me = id ? convos.get(id) : undefined;
+  if (!me) return nope("nao_autorizado", "credencial inválida ou conversa que não existe mais", 401);
+  if (!settings.agentTools) return nope("desligado", "o usuário desligou as ferramentas da Revoada para agentes", 403);
+  const tool = url.pathname.slice(7), body: any = await req.json().catch(() => ({}));
+  const root = me.by ? convos.get(me.by) : me;                  // quem responde pelo limite
+  const home = me.worktree?.main || me.cwd;                     // o projeto, não a cópia isolada
+  const mine = (c: { by?: string; id?: string }) => !!root && c.by === root.id;
+  const left = () => Math.max(0, AGENT_BUDGET - (root?.spawned || 0));
+  const text = (v: unknown, max = 20_000) => (typeof v === "string" ? v.trim().slice(0, max) : "");
+  // escolher para onde mandar: outro tipo de agente em rodízio, ou o mesmo alvo desta conversa
+  const targetFor = (agente: unknown) => {
+    if (agente === undefined || agente === null || agente === "") return me.target;
+    return typeof agente === "string" && PROVIDERS[agente] ? `pool:${agente}` : null;
+  };
+  const ready = (t: string) => (t.startsWith("pool:") ? !!pickAccount(t.slice(5), []) : !!statusCache.get(t)?.ok && !activeLimit(t));
+  // tudo que cria trabalho passa por aqui: modo, profundidade e limite
+  const spend = () => {
+    if (me.mode === "read") return nope("somente_leitura", "esta conversa está em modo só leitura: dá para consultar, não para criar trabalho", 403);
+    if (me.by) return nope("sem_delegacao", "você foi aberto por outro agente: faça a sua parte sem delegar nem criar tarefa", 403);
+    if (!left()) return nope("limite_de_tarefas", `esta conversa já criou ${AGENT_BUDGET} tarefas, delegações e agendamentos, que é o limite. Pare de criar e conte ao usuário o que ficou de fora.`, 429);
+    return null;
+  };
+  const spent = () => convos.mark(me.id, { spawned: (me.spawned || 0) + 1 });
+  const view = (c: NonNullable<ReturnType<typeof convos.get>>) => {
+    const last = c.messages.findLast((m) => m.role === "assistant" && !m.review);
+    return {
+      id: c.id, titulo: c.title, agente: accName(account(c.accountId || "") || undefined),
+      estado: c.waiting ? "esperando_permissao" : c.working ? "trabalhando" : last?.state === "done" ? "pronta" : last?.state === "error" ? "erro" : last?.state === "stopped" ? "interrompida" : "trabalhando",
+      resposta: (last?.items || []).filter((i) => i.kind === "text").map((i: any) => i.text).join("\n").slice(-8000), erro: last?.error,
+      arquivos: [...new Set(c.messages.flatMap((m) => (m.items || []).flatMap((i) => (i.kind === "files" ? i.changes.map((x) => x.path) : []))))].slice(0, 60),
+      branch: c.worktree?.branch, revisada: c.messages.some((m) => m.review),
+    };
+  };
+
+  try {
+    if (tool === "estado") {
+      await Promise.all(accounts.filter((a) => !statusCache.has(a.id)).map(refreshStatus));
+      return json({ ok: true, projeto: home, modo: me.mode, pode_criar: me.mode !== "read" && !me.by ? left() : 0, limite: AGENT_BUDGET,
+        contas: accounts.filter((a) => statusCache.get(a.id)?.ok).map((a) => ({ agente: a.provider, nome: a.label, no_limite: !!activeLimit(a.id), uso: liveUsage(a.id).map((u) => `${u.key} ${u.pct}%`) })),
+        abertas_por_voce: convos.all().filter(mine).map((c) => { const v = view(c); return { id: v.id, titulo: v.titulo, estado: v.estado }; }),
+        tarefas: board.list().filter((c) => c.cwd === home).map((c) => ({ id: c.id, titulo: c.title, coluna: c.state, sua: mine(c) })) });
+    }
+    if (tool === "quadro_listar") return json({ ok: true, tarefas: board.list().filter((c) => c.cwd === home).map((c) => ({ id: c.id, titulo: c.title, coluna: c.state, trabalhando: c.working, conversa: mine(c) ? c.convo : undefined, sua: mine(c) })) });
+    if (tool === "quadro_criar_tarefa" || tool === "delegar" || tool === "agendar") {
+      const stop = spend(); if (stop) return stop;
+      const pedido = text(body.pedido);
+      if (!pedido) return nope("pedido_vazio", "faltou o campo pedido, com a tarefa escrita por extenso");
+      const target = targetFor(body.agente);
+      if (!target) return nope("invalido", "agente tem que ser claude, codex, gemini ou grok");
+      await Promise.all(accounts.filter((a) => !statusCache.has(a.id)).map(refreshStatus));
+      if (!ready(target)) return nope("sem_conta_pronta", `não há conta pronta para ${target.startsWith("pool:") ? PROVIDERS[target.slice(5)].name : "esta conta"} agora. Tente outro agente ou faça você mesmo.`, 409);
+      if (tool === "quadro_criar_tarefa") {
+        const card = board.add({ prompt: pedido, cwd: home, target, title: text(body.titulo, 80) || undefined, by: root!.id });
+        spent();
+        const started = body.comecar === false ? null : await board.start(card.id);
+        return json({ ok: true, id: started?.convo || null, tarefa: card.id, coluna: started ? "doing" : "todo", restam: left(), dica: started ? "leia o resultado com conversa_ler usando o id" : "o usuário decide quando começar" });
+      }
+      if (tool === "delegar") {
+        const c = await openChat({ prompt: pedido, target, cwd: home, mode: AGENT_MODE[me.mode], brain: true, isolate: body.isolar !== false && !!(await repoInfo(home)), title: `↳ ${pedido.split("\n")[0].slice(0, 70)}`, by: root!.id });
+        spent();
+        return json({ ok: true, id: c.id, branch: c.worktree?.branch, restam: left(), dica: "use conversa_ler com este id (e esperar_segundos) para pegar a resposta" });
+      }
+      const daily = text(body.todo_dia_as, 5), at = body.quando ? new Date(String(body.quando)).getTime() : NaN;
+      if (!daily && !Number.isFinite(at)) return nope("invalido", "informe quando (data e hora ISO) ou todo_dia_as (HH:MM)");
+      const sch = schedules.add({ prompt: pedido, cwd: home, target, mode: "edit", brain: true, isolate: !!(await repoInfo(home)), kind: daily ? "daily" : "once", at: daily ? undefined : at, time: daily || undefined } as any);
+      spent();
+      return json({ ok: true, id: sch.id, proxima: sch.next ? new Date(sch.next).toISOString() : null, restam: left() });
+    }
+    if (tool === "conversa_ler") {
+      const c = convos.get(text(body.id, 40));
+      if (!c) return nope("nao_existe", "não há conversa com esse id", 404);
+      if (!mine(c)) return nope("fora_do_alcance", "essa conversa não foi aberta por você", 403);
+      const until = Date.now() + Math.min(110, Math.max(0, Number(body.esperar_segundos) || 0)) * 1000;
+      while (c.working && !c.waiting && Date.now() < until) await Bun.sleep(400);
+      return json({ ok: true, ...view(c) });
+    }
+    if (tool === "pedir_revisao") {
+      if (me.mode === "read") return nope("somente_leitura", "em modo só leitura não há mudança sua para revisar", 403);
+      if (!(await repoInfo(me.cwd))) return nope("nao_e_repositorio", "esta pasta não é um repositório git: não há diff para outra conta revisar");
+      convos.mark(me.id, { reviewAfter: true });
+      return json({ ok: true, quando: "assim que esta resposta terminar", dica: "termine o trabalho e encerre a resposta; a revisão aparece na conversa para o usuário" });
+    }
+    if (tool === "buscar_conversas") {
+      const q = text(body.texto, 200);
+      if (q.length < 3) return nope("invalido", "texto precisa de 3 caracteres ou mais");
+      // só o que foi dito neste projeto: conversa de outra pasta pode ter assunto que não é deste agente
+      const here = (cwd: string) => cwd === home || cwd.startsWith(home + "/") || convos.all().some((c) => c.cwd === cwd && c.worktree?.main === home);
+      return json({ ok: true, resultados: convos.search(q, 60).filter((r) => here(r.cwd) && r.id !== me.id).slice(0, 12).map((r) => ({ titulo: r.title, quem: r.who, trecho: r.snippet, quando: new Date(r.at).toISOString() })) });
+    }
+    if (tool === "cerebro_buscar") {
+      const q = text(body.texto, 300);
+      if (!q) return nope("invalido", "faltou o texto");
+      // as mesmas regras do contexto automático: nota de tema bloqueado não sai
+      const hits = await brain.search(q, 6, basename(home), true);
+      return json({ ok: true, resultados: hits.filter((h) => !h.blocked).map((h) => ({ nota: h.title, de: h.agent, trecho: h.excerpt })) });
+    }
+  } catch (e: any) { return nope(codeOf(String(e?.message || e)), String(e?.message || e)); }
+  return nope("nao_existe", `a ferramenta ${tool} não existe`, 404);
+}
+
 const server = Bun.serve({
   hostname: "127.0.0.1",
   port: PORT,
   async fetch(req, srv) {
     const url = new URL(req.url);
     // o servidor abre shells: só aceita chamadas da própria página local
+    if (url.pathname.startsWith("/agent/")) return agentApi(req, url);
     const hosts = [`127.0.0.1:${PORT}`, `localhost:${PORT}`];
     const origin = req.headers.get("origin");
     if (!hosts.includes(req.headers.get("host") || "") || (origin && !hosts.some((h) => origin === `http://${h}`))) {
@@ -899,6 +1054,7 @@ const server = Bun.serve({
     const [, , resource, id, action, extra] = path.split("/");
 
     if (resource === "state") return json(await state(url.searchParams.has("refresh")));
+    if (resource === "guide") return json({ guide: GUIDE, limite: AGENT_BUDGET });
     if (resource === "dirs") return json(listDirs());
 
     // entrada única do campo de pedido: uma conta abre sessão, várias respondem em paralelo
@@ -1143,7 +1299,7 @@ const server = Bun.serve({
       if (typeof body.rotate === "boolean") settings.rotate = body.rotate;
       if (typeof body.onboarded === "boolean") settings.onboarded = body.onboarded;
       if (typeof body.importChats === "boolean") settings.importChats = body.importChats;
-      for (const k of ["keepAwake", "lidAwake", "lidFreeze", "autoReview", "autoRead", "suggest", "tidyBrain", "sound"] as const) if (typeof body[k] === "boolean") settings[k] = body[k];
+      for (const k of ["keepAwake", "lidAwake", "lidFreeze", "autoReview", "autoRead", "suggest", "tidyBrain", "sound", "agentTools"] as const) if (typeof body[k] === "boolean") settings[k] = body[k];
       if (typeof body.autoClean === "boolean") { settings.autoClean = body.autoClean; if (body.autoClean) setTimeout(autoClean, 500); }
       if (typeof body.teach === "boolean") { settings.teach = body.teach; teachAll(body.teach); }
       writeFileSync(SETTINGS_FILE, JSON.stringify(settings));

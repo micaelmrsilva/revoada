@@ -16,6 +16,7 @@ Um app para macOS que junta as suas contas de agentes de código (Claude Code, C
 - **Busca no conteúdo.** A busca da lateral procura no que foi dito dentro das conversas, as daqui e as dos outros programas.
 - **Modelo automático.** A Revoada lê o pedido e escolhe o porte do modelo: consulta rápida no mais barato, trabalho pesado no mais forte.
 - **Aviso sonoro.** Um som quando um agente termina um trabalho demorado e outro quando ele precisa de você.
+- **Feita para agentes também.** Cada agente do Claude e do Codex recebe ferramentas da própria Revoada (via MCP): criar tarefa no quadro, delegar a outra conta, pedir revisão, agendar e consultar. E há uma linha de comando, `revoada`, para scripts e agentes de fora.
 - **Rodízio que leva a conversa.** Quando uma conta bate no limite, o pedido continua na próxima, com o histórico do que foi dito e feito. Vale também para trocar de agente à mão, até entre provedores.
 - **Permissão por ação.** No modo "Pergunta antes", o agente para e mostra o comando ou o arquivo antes de agir. Você permite, permite sempre naquela conversa, ou nega. O que só lê roda direto, sem perguntar.
 - **Consumo à vista.** Quanto cada conta já usou das janelas do provedor, e o rodízio começa pela mais folgada. Cada resposta mostra os tokens que gastou.
@@ -74,6 +75,9 @@ A Revoada é um servidor local em Bun com uma página, embrulhado numa janela na
 | `schedule.ts` | Pedidos agendados: o relógio e a regra de hora perdida. |
 | `tools.ts` | Skills e servidores MCP da conta padrão nas outras contas. |
 | `safe.ts` | Decide se um comando só lê, para rodar sem perguntar no modo "Pergunta antes". |
+| `mcp.ts` | A ponte MCP que os CLIs sobem para falar com a Revoada (`--mcp`). |
+| `agent-guide.ts` | O guia de uso para agentes: instruções do servidor MCP e `revoada guia`. |
+| `cli.ts` | A linha de comando `revoada`. |
 | `board.ts` | Quadro de tarefas: cartões, colunas e o que anda sozinho. |
 | `route.ts` | Modelo automático: as regras que dão o porte de um pedido. |
 | `remote.ts` | Acompanhamento pelo celular: a segunda porta, o código de acesso e a API reduzida. |
@@ -101,6 +105,34 @@ A Revoada é um servidor local em Bun com uma página, embrulhado numa janela na
 **Revisão cruzada.** O revisor recebe o pedido do usuário e o diff (numa cópia isolada, tudo desde que ela se separou da principal; arquivo novo fora do git entra inteiro) e roda em modo só leitura, numa sessão própria. A conta e a sessão nativa do autor não mudam. A escolha é outro provedor primeiro, porque outro modelo erra em lugares diferentes; sem outro pronto, outra conta do mesmo.
 
 **Cérebro.** `Agentes/` e `Projetos/` no cofre são espelho (a origem manda, a sincronização sobrescreve). `Revoada/` são notas próprias, onde você ou qualquer agente pode escrever. A busca é local, por palavra (BM25); com um modelo de embeddings no Ollama passa a considerar também o significado.
+
+## Para agentes
+
+**Dentro da Revoada.** Toda conversa com o Claude ou o Codex sobe uma ponte MCP chamada `revoada`, com nove ferramentas: `estado`, `quadro_listar`, `quadro_criar_tarefa`, `delegar`, `conversa_ler`, `pedir_revisao`, `agendar`, `buscar_conversas` e `cerebro_buscar`. O guia que o agente recebe está em `agent-guide.ts`. Gemini e Grok ficam de fora: os CLIs deles não aceitam servidor MCP por argumento.
+
+**As travas** ficam no servidor, não na boa vontade do agente:
+
+- Cada conversa cria no máximo 8 tarefas, delegações e agendamentos somados (`REVOADA_AGENT_BUDGET`). Depois disso a ferramenta devolve `limite_de_tarefas`.
+- Agente aberto por outro agente não delega nem cria tarefa, e o que ele abriria contaria no limite de quem o abriu. Não existe cadeia.
+- Conversa em modo só leitura consulta e não cria. Acesso total não passa adiante: quem é aberto por agente roda no máximo como "pode editar".
+- Não existe ferramenta para aprovar permissão, mudar ajuste, mexer em conta, parar ou apagar conversa.
+- O agente só lê conversas que ele mesmo abriu, e a busca dele só enxerga o projeto em que está.
+
+A credencial é por conversa, assinada com um segredo desta máquina (`~/.revoada/agent-secret`), e só vale em `/agent/*`. Desliga em Ajustes > "Agentes usam a Revoada".
+
+**De fora: a linha de comando.**
+
+```bash
+bun link                      # uma vez, na pasta da Revoada: cria o comando `revoada`
+revoada pedir "roda os testes e me diz o que falhou" --agente codex --esperar
+revoada tarefa "ajustar o rodapé" --comecar
+revoada conversa <id> --esperar --json
+revoada ajuda
+```
+
+Fala com a Revoada aberta nesta máquina. Toda saída aceita `--json`. Códigos de saída: 0 certo, 1 erro de uso, 2 o agente terminou com erro, 3 o agente espera a sua permissão, 4 a Revoada não está aberta.
+
+**Erros.** Todo erro, do painel, das ferramentas e da linha de comando, traz um `code` estável além da frase: `pasta_nao_existe`, `sem_conta_pronta`, `agente_ocupado`, `nao_existe`, `pedido_vazio`, `conta_no_limite`, `limite_de_tarefas`, `sem_delegacao`, `somente_leitura`, `fora_do_alcance`, `nao_autorizado`, `desligado`, `revoada_fechada`, `invalido`.
 
 ## Segurança
 
@@ -146,7 +178,7 @@ bun test
 
 `tests/flows.test.ts` sobe o servidor de verdade numa pasta de usuário descartável, com CLIs de mentira no `PATH` (`tests/stubs/`) que falam os mesmos protocolos dos reais. Cobre contas, conversa, rodízio, permissão, consumo, anexos, cérebro, cópias, importação, revisão cruzada e o acesso pelo celular (código, bloqueio e o que a porta não expõe). `tests/agenda.test.ts` cobre o relógio dos agendamentos sem esperar o relógio de verdade. `tests/safe.test.ts` cobre o que roda sem perguntar e `tests/md.test.ts` a formatação das respostas, incluindo texto que tenta virar marcação. Não toca na sua pasta de usuário nem gasta conta.
 
-`tests/bracos.test.ts` cobre o quadro, o plano em arquivo, a busca no conteúdo e o modelo automático. `tests/modelo.test.ts` cobre modelo, esforço, janela de contexto e a volta da conversa a um ponto; `tests/pagina.test.ts` confere que o script de cada página compila (nome declarado duas vezes derruba o painel inteiro). `tests/tela.test.ts` abre o painel num Chrome sem janela e mede o que só existe na tela: nada passa da largura da conversa, o texto chega aos poucos sem consulta repetida, o comando não aparece duas vezes e a fila funciona pelo teclado. No macOS as medidas de largura são repetidas num WKWebView (`tests/webkit.swift`), que é o motor da janela do app. Sem Chrome instalado esse arquivo é pulado.
+`tests/agentes.test.ts` cobre a ponte MCP (com os agentes de mentira subindo a ponte de verdade), as travas, os códigos de erro e a linha de comando. `tests/bracos.test.ts` cobre o quadro, o plano em arquivo, a busca no conteúdo e o modelo automático. `tests/modelo.test.ts` cobre modelo, esforço, janela de contexto e a volta da conversa a um ponto; `tests/pagina.test.ts` confere que o script de cada página compila (nome declarado duas vezes derruba o painel inteiro). `tests/tela.test.ts` abre o painel num Chrome sem janela e mede o que só existe na tela: nada passa da largura da conversa, o texto chega aos poucos sem consulta repetida, o comando não aparece duas vezes e a fila funciona pelo teclado. No macOS as medidas de largura são repetidas num WKWebView (`tests/webkit.swift`), que é o motor da janela do app. Sem Chrome instalado esse arquivo é pulado.
 
 O que os testes não cobrem: a janela nativa (barra de menus, vigília) e os CLIs reais. Se um provedor mudar o formato de saída, os testes continuam passando.
 

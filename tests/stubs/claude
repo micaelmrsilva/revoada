@@ -21,6 +21,31 @@ if (planAt) {
   const cur = existsSync(planAt) ? readFileSync(planAt, "utf8") : "";
   writeFileSync(planAt, cur ? cur.replace("- [ ] ", "- [x] ") : "# Objetivo\nentregar a tarefa\n## Passos\n- [ ] primeiro\n- [ ] segundo\n- [ ] terceiro\n## Onde parei\nno começo\n");
 }
+// --mcp-config aceita vários arquivos em seguida; o da Revoada (pasta agentes/) é a ponte das ferramentas dela
+const mcpAt = a.indexOf("--mcp-config"), mcpFiles: string[] = [];
+if (mcpAt >= 0) for (let i = mcpAt + 1; i < a.length && !a[i].startsWith("--"); i++) mcpFiles.push(a[i]);
+const agentFile = mcpFiles.find((f) => f.includes("/agentes/"));
+// "USA-REVOADA <ferramenta> <json>" no pedido: o agente de mentira sobe a ponte como um cliente MCP de verdade
+// (lendo o arquivo que a Revoada gerou) e chama a ferramenta. Cada linha é uma chamada; o texto da resposta sai na conversa.
+async function useRevoada(lines: string[]): Promise<string> {
+  if (!agentFile) return "sem-ponte";
+  const { readFileSync } = await import("fs");
+  const cfg = JSON.parse(readFileSync(agentFile, "utf8")).mcpServers.revoada;
+  const p = Bun.spawn([cfg.command, ...cfg.args], { env: { ...process.env, ...cfg.env }, stdin: "pipe", stdout: "pipe", stderr: "ignore" });
+  const outLines = (async function* () { const dec = new TextDecoder(); let buf = ""; for await (const ch of p.stdout) { buf += dec.decode(ch, { stream: true }); for (let i; (i = buf.indexOf("\n")) >= 0; buf = buf.slice(i + 1)) yield buf.slice(0, i); } })();
+  const rpc = async (id: number, method: string, params: unknown) => { p.stdin.write(JSON.stringify({ jsonrpc: "2.0", id, method, params }) + "\n"); p.stdin.flush(); for (;;) { const n = await outLines.next(); if (n.done) return undefined; const m = JSON.parse(n.value); if (m.id === id) return m.result; } }; // next() à mão: sair de um for-await fecharia o leitor
+  const init = await rpc(1, "initialize", { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "stub", version: "0" } });
+  const results: string[] = [`guia=${String(init?.instructions || "").startsWith("# Revoada, para agentes")}`];
+  let n = 2;
+  for (const line of lines) {
+    const m = line.match(/USA-REVOADA (\w+)\s*(\{.*\})?/);
+    if (!m) continue;
+    const r = await rpc(n++, "tools/call", { name: m[1], arguments: m[2] ? JSON.parse(m[2]) : {} });
+    results.push(`${m[1]}: ${r?.content?.[0]?.text?.replace(/\s+/g, " ")}`);
+  }
+  p.stdin.end();
+  return results.join(" || ");
+}
 const now = Math.floor(Date.now() / 1000);
 // "DEMO-RICA" no pedido: resposta com cara de trabalho de verdade (comando comprido, leitura, tabela,
 // lista), chegando aos poucos. Serve ao `bun run demo` e ao teste de tela.
@@ -62,6 +87,9 @@ if (a.includes("--permission-prompt-tool")) {
 } else if (said.includes("Você é o supervisor de uma equipe")) {
   // planejador do supervisor: duas tarefas independentes, no formato pedido
   out({ type: "assistant", message: { id: "p1", content: [{ type: "text", text: "Dá para separar em duas frentes que não se tocam.\n\n```json\n" + JSON.stringify({ tarefas: [{ titulo: "Exportação de pedidos", pedido: "CRIA-ARQUIVO da exportação de pedidos" }, { titulo: "Importação de clientes", pedido: "CRIA-ARQUIVO da importação de clientes" }] }) + "\n```" }] } });
+} else if (said.includes("USA-REVOADA")) {
+  const text = await useRevoada(said.split("\n").filter((l) => l.includes("USA-REVOADA")));
+  out({ type: "assistant", message: { id: "r1", content: [{ type: "text", text }] } });
 } else if (RICH) {
   out({ type: "assistant", message: { id: "d1", content: [{ type: "tool_use", id: "dt1", name: "Bash", input: { command: LONG, description: "Confere o andamento da criação da rodada r9" } }] } });
   await nap(120);
@@ -74,7 +102,7 @@ if (a.includes("--permission-prompt-tool")) {
 } else {
   out({ type: "stream_event", event: { type: "message_start", message: { id: "m1" } } });
   for (const t of ["olá ", "mundo"]) out({ type: "stream_event", event: { type: "content_block_delta", index: 0, delta: { type: "text_delta", text: t } } });
-  out({ type: "assistant", message: { id: "m1", content: [{ type: "text", text: `olá mundo; imagens=${blocks.filter((b) => b.type === "image").length}; retomada=${a.includes("--resume")}; modelo=${flag("--model")}; esforco=${flag("--effort")}; plano=${planAt ? "instruido" : "nao"}; viu-plano=${(sys + said).includes("Plano como está agora")}; revisor=${said.includes("<diff>") && said.includes("novo.txt")}; leitura=${!a.includes("--permission-mode") && !a.includes("--dangerously-skip-permissions")}; auditoria=${said.includes("auditor de segurança")}; mcp=${a.includes("--mcp-config") ? a[a.indexOf("--mcp-config") + 1] : "nao"}` }], usage: { input_tokens: 1000, cache_read_input_tokens: 50000, cache_creation_input_tokens: 2000, output_tokens: 900 } } });
+  out({ type: "assistant", message: { id: "m1", content: [{ type: "text", text: `olá mundo; imagens=${blocks.filter((b) => b.type === "image").length}; retomada=${a.includes("--resume")}; modelo=${flag("--model")}; esforco=${flag("--effort")}; plano=${planAt ? "instruido" : "nao"}; viu-plano=${(sys + said).includes("Plano como está agora")}; revisor=${said.includes("<diff>") && said.includes("novo.txt")}; leitura=${!a.includes("--permission-mode") && !a.includes("--dangerously-skip-permissions")}; auditoria=${said.includes("auditor de segurança")}; revoada=${agentFile ? "sim" : "nao"}; liberadas=${flag("--allowedTools")}; mcp=${mcpFiles.find((f) => !f.includes("/agentes/")) || "nao"}` }], usage: { input_tokens: 1000, cache_read_input_tokens: 50000, cache_creation_input_tokens: 2000, output_tokens: 900 } } });
 }
 out({ type: "result", subtype: "success", is_error: false, session_id: "s-claude", total_cost_usd: 0.05, modelUsage: { [MODEL]: { contextWindow: RICH ? 1_000_000 : 200_000 }, "claude-auxiliar": { contextWindow: 64_000 } }, usage: { input_tokens: 100, cache_creation_input_tokens: 20, cache_read_input_tokens: 3000, output_tokens: 40 } });
 process.exit(0);

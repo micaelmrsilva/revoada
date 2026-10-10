@@ -55,6 +55,9 @@ export type Convo = {
   suggest?: string;    // próxima mensagem provável, oferecida no campo quando o agente termina
   model?: string;      // escolhidos pelo usuário para as próximas respostas; sem valor, vale o padrão da conta ("auto" = decide pelo pedido)
   effort?: string;
+  by?: string;         // conversa aberta por um agente: id da conversa de origem (a raiz), que responde pelo limite
+  spawned?: number;    // quantas tarefas, delegações e agendamentos os agentes desta conversa já criaram
+  reviewAfter?: boolean; // o agente pediu revisão: roda quando a resposta terminar
   plan?: boolean;      // tarefa longa: o agente mantém um plano em arquivo e continua dele
   planTold?: string;   // sessão do agente que já recebeu as instruções do plano
   waiting?: boolean;   // parado esperando o usuário permitir ou negar algo
@@ -243,7 +246,7 @@ export function createConvos(d: {
   suggest?: (c: Convo) => Promise<string | null>;
   // no modo "perguntar": ação que pode seguir sem passar pelo usuário (só leitura)
   autoAllow?: (tool: string, input: any) => boolean;
-  extraArgs?: (a: Acc) => string[];
+  extraArgs?: (a: Acc, c: Convo) => string[];
 }) {
   mkdirSync(d.dir, { recursive: true });
   const convos = new Map<string, Convo>();
@@ -344,7 +347,7 @@ ${cur.trim() ? `Plano como está agora:\n\n${clip(cur, 8000)}` : "Ainda não há
       model = r.model;
       effort = r.effort && EFFORTS[acc.provider]?.includes(r.effort) ? r.effort : undefined;
     }
-    const opts: RunOpts = { prompt, ctx, resume, mode, dirs: [d.vault, ...(files.length ? [d.attachDir] : []), ...(c.plan && d.planDir ? [d.planDir] : [])], files, extra: d.extraArgs?.(acc) || [], model, effort };
+    const opts: RunOpts = { prompt, ctx, resume, mode, dirs: [d.vault, ...(files.length ? [d.attachDir] : []), ...(c.plan && d.planDir ? [d.planDir] : [])], files, extra: force ? [] : d.extraArgs?.(acc, c) || [], model, effort };
     const proc = Bun.spawn([bin, ...adapter.args(opts)], {
       cwd: c.cwd, env: { ...d.envFor(acc), TERM: "dumb", NO_COLOR: "1" }, stdin: adapter.stdin ? "pipe" : "ignore", stdout: "pipe", stderr: "pipe",
     });
@@ -655,11 +658,11 @@ Responda em português, com uma lista numerada do mais grave para o menos. Cada 
     return () => { closed = true; clearTimeout(timer); watchers.get(id)?.delete(kick); if (!watchers.get(id)?.size) watchers.delete(id); };
   }
 
-  function create(o: { prompt: string; target: string; cwd: string; mode: Mode; brain: boolean; worktree?: Convo["worktree"]; attachments?: Attachment[]; model?: string | null; effort?: string | null; plan?: boolean }) {
+  function create(o: { prompt: string; target: string; cwd: string; mode: Mode; brain: boolean; worktree?: Convo["worktree"]; attachments?: Attachment[]; model?: string | null; effort?: string | null; plan?: boolean; by?: string }) {
     const c: Convo = {
       id: crypto.randomUUID().slice(0, 8), title: (o.prompt.split("\n")[0] || o.attachments?.[0]?.name || "Conversa").slice(0, 80), cwd: o.cwd, target: o.target, mode: o.mode, brain: o.brain,
       accountId: null, provider: o.target.startsWith("pool:") ? o.target.slice(5) : d.account(o.target)?.provider || "", native: null,
-      messages: [], working: false, at: Date.now(), rev: 0, worktree: o.worktree,
+      messages: [], working: false, at: Date.now(), rev: 0, worktree: o.worktree, ...(o.by ? { by: o.by } : {}),
     };
     convos.set(c.id, c);
     send(c, o.prompt, { attachments: o.attachments, model: o.model, effort: o.effort, plan: o.plan });
@@ -674,6 +677,9 @@ Responda em português, com uma lista numerada do mais grave para o menos. Cada 
       const boxes = [...text.matchAll(/^\s*[-*] \[([ xX])\]/gm)];
       return { on: !!c?.plan, text, total: boxes.length, done: boxes.filter((b) => b[1] !== " ").length, file: planFile(id) };
     },
+    // registro feito pelo servidor em nome de um agente (limite gasto, revisão pedida)
+    mark(id: string, patch: Partial<Pick<Convo, "spawned" | "reviewAfter">>) { const c = convos.get(id); if (c) { Object.assign(c, patch); touch(c); } },
+    all: () => [...convos.values()],
     setPlan(id: string, on: boolean) { const c = convos.get(id); if (!c) return; if (on) c.plan = true; else { delete c.plan; delete c.planTold; } touch(c); },
     // busca no que foi dito em todas as conversas guardadas: seu texto e o texto das respostas
     search(q: string, max = 30) {

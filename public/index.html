@@ -596,6 +596,7 @@ function paintSettings() {
     + row("importChats", S.settings.importChats, "Conversas dos outros programas", "Mostra na lateral o que o Claude Code e o Codex já guardaram nesta máquina, para continuar daqui.")
     + row("autoClean", S.settings.autoClean, "Limpeza de clones", "Cópias de repositório que já viraram PR e não têm nada pendente vão sozinhas para a Lixeira.")
     + row("autoRead", S.settings.autoRead, "Leitura sem perguntar", "No modo \"Pergunta antes\", o que só lê (listar, buscar, ver arquivo, consultar o git e o GitHub) roda direto. Escrever, apagar, instalar e qualquer comando que a Revoada não reconheça continuam pedindo permissão.")
+    + row("agentTools", S.settings.agentTools, "Agentes usam a Revoada", "Cada agente do Claude e do Codex ganha ferramentas para criar tarefa no quadro, delegar a outra conta, pedir revisão, agendar e consultar conversas e o cérebro. Com limite de criações por conversa, sem delegar em cadeia, e sem poder aprovar permissão nem mudar ajuste.")
     + row("sound", S.settings.sound, "Aviso sonoro", "Um som quando um agente termina um trabalho demorado e outro quando ele precisa da sua permissão. Resposta rápida com a janela em foco não toca.")
     + row("suggest", S.settings.suggest, "Sugestão do próximo pedido", "Quando o agente termina, o campo oferece a próxima mensagem provável: Tab aceita, Enter envia. Usa o modelo mais barato do Claude a cada resposta.")
     + row("autoReview", S.settings.autoReview, "Revisão automática", "Quando um agente mexe em arquivo, uma conta de outro provedor revisa o resultado em seguida. Gasta uso da conta que revisa.")
@@ -1233,14 +1234,17 @@ function itemHtml(it, key) {
     return `<details class="act astep" data-key="${key}" ${open}><summary><span class="what ${it.desc ? "plain" : ""}">${esc(it.desc || it.command.split("\n")[0])}</span>${run || it.exit ? `<span class="st ${run ? "run" : "bad"}">${run ? "rodando" : `saiu com ${it.exit}`}</span>` : ""}</summary>${it.desc || it.command.includes("\n") ? `<pre class="cmdline">${esc(it.command)}</pre>` : ""}<pre>${esc(it.output) || (run ? "ainda sem saída" : "sem saída")}</pre></details>`;
   }
   if (it.kind === "files") return `<div class="act flat astep"><span class="what plain">Editou</span>${it.changes.map((c) => `<span class="file">${esc(short(c.path))}<small>${{ add: "novo", delete: "apagado", update: "editado" }[c.kind] || esc(c.kind)}</small></span>`).join("")}</div>`;
-  if (it.kind === "tool") return `<details class="act astep" data-key="${key}" ${open}><summary><span class="what plain"><b>${esc(it.name)}</b> ${esc(it.detail)}</span><span class="st ${it.status === "failed" ? "bad" : it.status === "in_progress" ? "run" : ""}">${it.status === "failed" ? "falhou" : it.status === "in_progress" ? "rodando" : ""}</span></summary><pre>${esc(it.output) || "sem saída"}</pre></details>`;
+  if (it.kind === "tool") return `<details class="act astep" data-key="${key}" ${open}><summary><span class="what plain"><b>${esc(toolName(it.name))}</b> ${esc(it.detail)}</span><span class="st ${it.status === "failed" ? "bad" : it.status === "in_progress" ? "run" : ""}">${it.status === "failed" ? "falhou" : it.status === "in_progress" ? "rodando" : ""}</span></summary><pre>${esc(it.output) || "sem saída"}</pre></details>`;
   if (it.kind === "todo") return `<div class="act"><ul class="todo">${it.items.map((t) => `<li class="${t.done ? "done" : ""}">${t.done ? "✓" : "○"} ${esc(t.text)}</li>`).join("")}</ul></div>`;
   return "";
 }
 const QUIET = new Set(["think", "cmd", "tool", "files"]);
 const running = (it) => (it.kind === "cmd" ? it.exit == null && it.status !== "failed" : it.status === "in_progress");
 // uma linha que conta o que foi feito; enquanto algo roda, mostra o que é
-const stepLabel = (it) => (it.kind === "cmd" ? it.desc || it.command.split("\n")[0] : it.kind === "files" ? `Editando ${it.changes.map((c) => base(c.path)).join(", ")}` : it.kind === "tool" ? `${it.name} ${it.detail}` : "Pensando");
+const REVOADA_TOOL = { estado: "ver o estado", quadro_listar: "ver o quadro", quadro_criar_tarefa: "criar tarefa no quadro", delegar: "delegar a outro agente", conversa_ler: "ler a conversa delegada", pedir_revisao: "pedir revisão", agendar: "agendar um pedido", buscar_conversas: "buscar nas conversas", cerebro_buscar: "buscar no cérebro" };
+// o Claude chama de mcp__revoada__x; o Codex, de "revoada · x"
+const toolName = (n) => { const m = String(n).match(/^(?:mcp__revoada__|revoada · )(\w+)$/); return m ? `Revoada · ${REVOADA_TOOL[m[1]] || m[1]}` : n; };
+const stepLabel = (it) => (it.kind === "cmd" ? it.desc || it.command.split("\n")[0] : it.kind === "files" ? `Editando ${it.changes.map((c) => base(c.path)).join(", ")}` : it.kind === "tool" ? `${toolName(it.name)} ${/^(?:mcp__revoada__|revoada · )/.test(it.name) ? "" : it.detail}`.trim() : "Pensando");
 function groupLabel(g, live) {
   const n = { cmd: 0, files: 0, read: 0, search: 0, web: 0, tool: 0 };
   for (const it of g) {
@@ -1415,7 +1419,7 @@ function renderChat() {
   const a = acc(chat.accountId);
   $("chTitle").textContent = chat.title;
   const spent = chat.messages.reduce((n, m) => n + (m.tokens ? m.tokens.in + m.tokens.out + m.tokens.cache : 0), 0);
-  $("chSub").textContent = `${a ? accName(a) : targetName(chat.target)} · ${chat.worktree ? `cópia isolada de ${base(chat.worktree.main)}, branch ${chat.worktree.branch}` : brief(short(chat.cwd))}${chat.native ? "" : chat.messages.length > 2 ? " · próxima resposta leva o histórico" : ""}${spent ? ` · ${tok(spent)} tokens na conversa` : ""}`;
+  $("chSub").textContent = `${a ? accName(a) : targetName(chat.target)} · ${chat.worktree ? `cópia isolada de ${base(chat.worktree.main)}, branch ${chat.worktree.branch}` : brief(short(chat.cwd))}${chat.by ? " · aberta por um agente" : ""}${chat.native ? "" : chat.messages.length > 2 ? " · próxima resposta leva o histórico" : ""}${spent ? ` · ${tok(spent)} tokens na conversa` : ""}`;
   const planned = chat.plan && planInfo.id === chat.id;
   const acts = `<button class="link" id="seePlan" title="${chat.plan ? "O plano que o agente mantém em arquivo para esta tarefa" : "Para tarefa longa: o agente escreve um plano em arquivo, marca os passos e continua dele se a conversa for cortada ou trocar de conta"}">${chat.plan ? `Plano${planned && planInfo.total ? ` ${planInfo.done}/${planInfo.total}` : ""}` : "Plano"}</button><button class="link" id="seeDiff" title="O que mudou nos arquivos desta pasta">Mudanças</button>` + (chat.working ? "" : `<button class="link" id="askReview" title="Uma conta de outro provedor lê o que mudou, sem editar nada, e aponta defeitos">Revisar</button><button class="link" id="askSec" title="Outra conta audita a segurança: por onde entra dado de fora, onde ele chega e o que dá para explorar. Sem mudança pendente, audita o projeto inteiro.">Segurança</button>`) + (chat.worktree && !chat.working ? `<button class="link" id="mkPr" title="Pede ao agente para fazer commit, push e abrir o PR. Com o PR aberto e nada pendente, a cópia some sozinha.">Criar PR</button>` : "");
   if ($("chActs").innerHTML !== acts) $("chActs").innerHTML = acts;
