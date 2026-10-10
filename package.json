@@ -9,7 +9,8 @@
     "app": "scripts/build-app.sh",
     "app:install": "bun test && scripts/build-app.sh --install",
     "app:zip": "scripts/build-app.sh --zip",
-    "test": "bun test"
+    "test": "bun test",
+    "demo": "bun scripts/demo.ts"
   },
   "dependencies": {
     "@xterm/addon-fit": "^0.11.0",

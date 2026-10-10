@@ -33,10 +33,13 @@ export type Msg = {
   tokens?: Tokens;
   review?: boolean;    // resposta de outra conta revisando o trabalho desta conversa
 };
+// mensagem escrita enquanto o agente respondia: entra sozinha quando ele terminar
+export type Queued = { text: string; at: number; target?: string; mode?: Mode; brain?: boolean; attachments?: Attachment[] };
 export type Convo = {
   id: string; title: string; cwd: string; target: string; mode: Mode; brain: boolean;
   accountId: string | null; provider: string; native: { accountId: string; sessionId: string } | null;
   messages: Msg[]; working: boolean; at: number; rev: number;
+  queue?: Queued[];
   waiting?: boolean;   // parado esperando o usuário permitir ou negar algo
   allow?: string[];    // ferramentas que o usuário mandou permitir sempre nesta conversa
   titled?: boolean;    // já tem título de verdade (gerado ou digitado)
@@ -214,6 +217,7 @@ export function createConvos(d: {
   const procs = new Map<string, { proc: any; stopped: boolean }>();
   const asks = new Map<string, Map<string, (allow: boolean) => void>>(); // conversa -> pedido -> resposta
   const timers = new Map<string, any>();
+  const watchers = new Map<string, Set<() => void>>(); // quem está com a conversa aberta na tela
 
   for (const f of readdirSync(d.dir)) {
     if (!f.endsWith(".json")) continue;
@@ -233,6 +237,7 @@ export function createConvos(d: {
   function touch(c: Convo) {
     c.rev++;
     c.at = Date.now();
+    for (const kick of watchers.get(c.id) || []) kick();
     if (timers.has(c.id)) return;
     timers.set(c.id, setTimeout(() => { timers.delete(c.id); if (convos.has(c.id)) writeFileSync(join(d.dir, `${c.id}.json`), JSON.stringify(c)); }, 800));
   }
@@ -428,7 +433,12 @@ export function createConvos(d: {
     c.waiting = false;
     touch(c);
     d.onIdle();
-    if (msg.state === "done") d.afterDone?.(c, msg);
+    // Fila: o que foi escrito durante a resposta entra agora. Depois de erro não: mandar a próxima
+    // numa conta que acabou de falhar só queimaria a mensagem; ela fica na fila, à vista.
+    const next = msg.state !== "error" ? c.queue?.shift() : undefined;
+    if (c.queue && !c.queue.length) delete c.queue;
+    if (next) { const { text, at: _at, ...patch } = next; send(c, text, patch); }
+    else if (msg.state === "done") d.afterDone?.(c, msg);
     // primeira resposta pronta: troca a primeira linha do pedido por um título de verdade
     if (!c.titled && msg.state === "done") {
       c.titled = true;
@@ -479,12 +489,52 @@ Responda em português, com uma lista numerada do mais grave para o menos. Cada 
   }
 
   function send(c: Convo, text: string, patch: { target?: string; mode?: Mode; brain?: boolean; attachments?: Attachment[] } = {}) {
-    if (c.working) throw new Error("o agente ainda está respondendo");
+    if (c.working) {
+      (c.queue ||= []).push({ text, at: Date.now(), target: patch.target, mode: patch.mode, brain: patch.brain, attachments: patch.attachments?.length ? patch.attachments : undefined });
+      touch(c);
+      return "queued" as const;
+    }
     if (patch.target) c.target = patch.target;
     if (patch.mode) c.mode = patch.mode;
     if (typeof patch.brain === "boolean") c.brain = patch.brain;
     c.messages.push({ role: "user", at: Date.now(), text, attachments: patch.attachments?.length ? patch.attachments : undefined });
     runTurn(c, c.messages.length - 1);
+    return "sent" as const;
+  }
+
+  // Conversa ao vivo: em vez de a página perguntar de tempo em tempo, o servidor avisa a cada mudança.
+  // O primeiro aviso leva tudo; os seguintes, só os itens da última mensagem que mudaram e as
+  // mensagens novas. No máximo um aviso a cada ~30 ms, pra texto chegando não virar enxurrada.
+  const STREAM_GAP_MS = 30;
+  function watch(id: string, push: (ev: unknown) => void) {
+    if (!convos.has(id)) return null;
+    let seen = 0, cacheAt = -1, last = 0, timer: any = null, first = true, closed = false;
+    const cache: string[] = []; // itens da última mensagem, como foram enviados
+    const emit = () => {
+      timer = null;
+      if (closed) return;
+      last = Date.now();
+      const c = convos.get(id);
+      if (!c) return push({ gone: true });
+      const { messages, ...meta } = c;
+      const msgs: unknown[] = [];
+      for (let i = Math.max(0, seen - 1); i < messages.length; i++) {
+        const { items, ...head } = messages[i];
+        if (i !== cacheAt) { cache.length = 0; cacheAt = i; }
+        const at: [number, Item][] = [];
+        (items || []).forEach((it, j) => { const s = JSON.stringify(it); if (cache[j] !== s) { cache[j] = s; at.push([j, it]); } });
+        cache.length = items?.length || 0;
+        msgs.push({ i, head, at, len: items ? items.length : -1 });
+      }
+      seen = messages.length;
+      push({ ...(first ? { first: true } : {}), meta, n: messages.length, msgs });
+      first = false;
+    };
+    const kick = () => { if (!timer && !closed) timer = setTimeout(emit, Math.max(0, STREAM_GAP_MS - (Date.now() - last))); };
+    if (!watchers.has(id)) watchers.set(id, new Set());
+    watchers.get(id)!.add(kick);
+    emit();
+    return () => { closed = true; clearTimeout(timer); watchers.get(id)?.delete(kick); if (!watchers.get(id)?.size) watchers.delete(id); };
   }
 
   function create(o: { prompt: string; target: string; cwd: string; mode: Mode; brain: boolean; worktree?: Convo["worktree"]; attachments?: Attachment[] }) {
@@ -499,7 +549,8 @@ Responda em português, com uma lista numerada do mais grave para o menos. Cada 
   }
 
   return {
-    create, send, review,
+    create, send, review, watch,
+    unqueue(id: string, index: number) { const c = convos.get(id); if (c?.queue?.[index]) { c.queue.splice(index, 1); if (!c.queue.length) delete c.queue; touch(c); } },
     get: (id: string) => convos.get(id),
     rename(id: string, title: string) { const c = convos.get(id); if (c) { c.title = title; c.titled = true; touch(c); } },
     // resposta do usuário a um pedido de permissão; "always" libera a ferramenta pelo resto da conversa
@@ -515,7 +566,7 @@ Responda em português, com uma lista numerada do mais grave para o menos. Cada 
     adopt(c: Convo) { if (!convos.has(c.id)) { convos.set(c.id, c); touch(c); } return convos.get(c.id)!; },
     natives: () => [...convos.values()].map((c) => c.native?.sessionId).filter(Boolean) as string[],
     stop(id: string) { const h = procs.get(id); if (h) { h.stopped = true; h.proc.kill(); } },
-    remove(id: string) { this.stop(id); convos.delete(id); rmSync(join(d.dir, `${id}.json`), { force: true }); },
+    remove(id: string) { this.stop(id); convos.delete(id); rmSync(join(d.dir, `${id}.json`), { force: true }); for (const kick of watchers.get(id) || []) kick(); },
     list: () => [...convos.values()].map((c) => ({ id: c.id, title: c.title, cwd: c.cwd, at: c.at, working: c.working, waiting: !!c.waiting, accountId: c.accountId, target: c.target, startedAt: c.messages.at(-1)?.at || c.at, imported: c.imported })),
     // conversa mexida há pouco ainda conta: o usuário pode responder a qualquer momento
     inUse: (path: string) => [...convos.values()].some((c) => (c.working || Date.now() - c.at < 20 * 60_000) && (c.cwd === path || c.cwd.startsWith(path + "/"))),

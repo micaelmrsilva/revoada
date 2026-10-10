@@ -10,17 +10,52 @@ const first = JSON.parse((await lines.next()).value);
 const blocks: any[] = first.message.content;
 const said = blocks.filter((b) => b.type === "text").map((b) => b.text).join("\n");
 const now = Math.floor(Date.now() / 1000);
+// "DEMO-RICA" no pedido: resposta com cara de trabalho de verdade (comando comprido, leitura, tabela,
+// lista), chegando aos poucos. Serve ao `bun run demo` e ao teste de tela.
+const RICH = said.includes("DEMO-RICA");
+const LONG = "cd ~/git/arara/ops/disparo && ./criar-contas.sh --rodada r9 --contas ronaldo,hotline,consig,dibetech,credimais,simular,fabricio,isabela,oka --por-conta 500 --retomar 2>&1 | tee -a /private/tmp/revoada/-Users-exemplo-git/78a0740b-e97f-4e40-ac3e/log-da-rodada-r9.txt";
+const ANSWER = `Quase. Às 14:42 oito contas estão criadas e a última (Oka) está em 300 de 500, com uns 3 minutos pela frente.
+
+| Conta | Registrados (de 500) |
+| --- | --- |
+| Ronaldo (AraraHQ) | 496 |
+| Hotline Soluções | 497 |
+| Consig | 499 |
+| Oka | 300, criando agora |
+
+- **Os que faltam por poucas unidades** quase todos existem na Gupshup: a resposta estourou o tempo e, na retentativa, ela respondeu que o template já existe.
+  - conferi em \`ops/disparo/log.txt\`
+- **Fabricio e Isabela têm um número inteiro faltando** (50 cada).
+
+## Próximo passo
+
+1. Esperar a Oka terminar
+2. Rodar mais uma passada para fechar os buracos
+
+\`\`\`bash
+./criar-contas.sh --rodada r9 --so-o-que-falta
+\`\`\``;
+const nap = (ms: number) => new Promise((r) => setTimeout(r, ms));
 out({ type: "system", subtype: "init", session_id: "s-claude" });
 out({ type: "rate_limit_event", rate_limit_info: { unifiedWindows: { five_hour: { utilization: 0.42, resetsAt: now + 3600 }, seven_day: { utilization: 0.1, resetsAt: now + 86400 } } } });
 if (a.includes("--permission-prompt-tool")) {
   // "SO-LEITURA" no pedido: o agente quer só listar; o resto quer criar arquivo
-  const input = { command: said.includes("SO-LEITURA") ? "ls -la | head -5" : "touch feito.txt" };
+  const input = { command: said.includes("SO-LEITURA") ? "ls -la | head -5" : RICH ? LONG : "touch feito.txt" };
   out({ type: "assistant", message: { id: "m1", content: [{ type: "tool_use", id: "tu1", name: "Bash", input }] } });
   out({ type: "control_request", request_id: "r1", request: { subtype: "can_use_tool", tool_name: "Bash", input } });
   const answer = JSON.parse((await lines.next()).value).response.response;
   if (answer.behavior === "allow") writeFileSync("feito.txt", "ok");
   out({ type: "user", message: { content: [{ type: "tool_result", tool_use_id: "tu1", content: answer.behavior === "allow" ? "" : "negado", is_error: answer.behavior !== "allow" }] } });
   out({ type: "assistant", message: { id: "m2", content: [{ type: "text", text: answer.behavior === "allow" ? "permitido" : "negado" }] } });
+} else if (RICH) {
+  out({ type: "assistant", message: { id: "d1", content: [{ type: "tool_use", id: "dt1", name: "Bash", input: { command: LONG } }] } });
+  await nap(120);
+  out({ type: "user", message: { content: [{ type: "tool_result", tool_use_id: "dt1", content: "14:42\noka: 300/500" }] } });
+  out({ type: "assistant", message: { id: "d2", content: [{ type: "tool_use", id: "dt2", name: "Read", input: { file_path: "ops/disparo/log.txt" } }] } });
+  out({ type: "user", message: { content: [{ type: "tool_result", tool_use_id: "dt2", content: "..." }] } });
+  out({ type: "stream_event", event: { type: "message_start", message: { id: "d3" } } });
+  for (let i = 0; i < ANSWER.length; i += 24) { out({ type: "stream_event", event: { type: "content_block_delta", index: 0, delta: { type: "text_delta", text: ANSWER.slice(i, i + 24) } } }); await nap(25); }
+  out({ type: "assistant", message: { id: "d3", content: [{ type: "text", text: ANSWER }] } });
 } else {
   out({ type: "stream_event", event: { type: "message_start", message: { id: "m1" } } });
   for (const t of ["olá ", "mundo"]) out({ type: "stream_event", event: { type: "content_block_delta", index: 0, delta: { type: "text_delta", text: t } } });

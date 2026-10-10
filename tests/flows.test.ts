@@ -375,6 +375,51 @@ describe("revisão cruzada e tokens", () => {
   }, SLOW);
 });
 
+describe("conversa ao vivo e fila", () => {
+  test("aplicando os avisos em ordem chega-se ao mesmo estado da consulta, e eles vêm aos pedaços", async () => {
+    await import("../public/sync.js");
+    const apply = (globalThis as any).applyStream as (c: any, ev: any) => any;
+    const id = await chat("claude-padrao", "DEMO-RICA ao vivo");
+    const ctl = new AbortController();
+    const res = await fetch(`${ORIGIN}/api/convos/${id}/stream`, { signal: ctl.signal });
+    expect(res.headers.get("content-type")).toBe("text/event-stream");
+    const reader = res.body!.getReader(), dec = new TextDecoder();
+    let buf = "", state: any = null, events = 0, small = 0, firsts = 0;
+    while (!(state && !state.working && events > 1)) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buf += dec.decode(value, { stream: true });
+      for (let i; (i = buf.indexOf("\n\n")) >= 0; buf = buf.slice(i + 2)) {
+        const line = buf.slice(0, i);
+        if (!line.startsWith("data: ")) continue;
+        const ev = JSON.parse(line.slice(6));
+        events++; if (ev.first) firsts++;
+        // aviso pequeno: só o item que mudou, não a conversa inteira
+        if (!ev.first && ev.msgs.length === 1 && ev.msgs[0].at.length === 1) small++;
+        state = apply(state, ev);
+      }
+    }
+    ctl.abort();
+    expect(firsts).toBe(1);
+    expect(events).toBeGreaterThan(8);
+    expect(small).toBeGreaterThan(5);
+    expect(state.messages).toEqual((await get(`convos/${id}`)).messages);
+    expect(state.messages.at(-1).items.at(-1).text).toContain("| Conta | Registrados (de 500) |");
+  }, SLOW);
+
+  test("mensagem mandada durante a resposta entra na fila, sai dela a pedido e a seguinte entra sozinha", async () => {
+    const id = await chat("claude-padrao", "DEMO-RICA fila"); // responde devagar: dá tempo de enfileirar
+    expect((await post(`convos/${id}/send`, { text: "primeira da fila" })).queued).toBe(true);
+    expect((await post(`convos/${id}/send`, { text: "segunda da fila" })).queued).toBe(true);
+    expect((await get(`convos/${id}`)).queue.map((q: any) => q.text)).toEqual(["primeira da fila", "segunda da fila"]);
+    await api(`convos/${id}/queue/0`, "DELETE");
+    const c = await until(async () => { const x = await get(`convos/${id}`); return x.messages.length === 4 && !x.working && x; });
+    expect(c.messages.map((m: any) => m.text).filter(Boolean)).toEqual(["DEMO-RICA fila", "segunda da fila"]);
+    expect(c.queue).toBeUndefined();
+    expect(texts(c)).toContain("retomada=true"); // a da fila continuou a mesma sessão do agente
+  }, SLOW);
+});
+
 describe("acompanhar pelo celular", () => {
   const REMOTE = `http://127.0.0.1:${PORT + 1}`;
   const token = () => JSON.parse(readFileSync(join(HOME, ".revoada/remote.json"), "utf8")).token as string;

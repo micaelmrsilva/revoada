@@ -776,7 +776,7 @@ const server = Bun.serve({
     if (path === "/" || path === "/index.html") return new Response(Bun.file(join(PUBLIC, "index.html")));
     if (path === "/logo.svg" || path === "/icon.svg") return new Response(Bun.file(join(PUBLIC, path)));
     if (path === "/mini") return new Response(Bun.file(join(PUBLIC, "mini.html")));
-    if (path === "/md.js") return new Response(Bun.file(join(PUBLIC, "md.js")));
+    if (path === "/md.js" || path === "/sync.js") return new Response(Bun.file(join(PUBLIC, path)));
     // só em desenvolvimento: estado de mentira pra olhar o painel da barra com tudo aceso
     if (path === "/api/demo-state" && process.env.REVOADA_DEMO) return json(demoState(await state(false)));
     if (path.startsWith("/vendor/")) {
@@ -787,7 +787,7 @@ const server = Bun.serve({
 
     // o anexo chega como arquivo cru no corpo; ali não se lê como JSON
     const body: any = req.method === "GET" || req.method === "DELETE" || path === "/api/attach" ? {} : await req.json().catch(() => ({}));
-    const [, , resource, id, action] = path.split("/");
+    const [, , resource, id, action, extra] = path.split("/");
 
     if (resource === "state") return json(await state(url.searchParams.has("refresh")));
     if (resource === "dirs") return json(listDirs());
@@ -845,7 +845,24 @@ const server = Bun.serve({
     if (resource === "convos") {
       const c = convos.get(id);
       if (!c) return fail("conversa não existe", 404);
+      if (req.method === "DELETE" && action === "queue") { convos.unqueue(c.id, Number(extra)); return json({ ok: true }); }
       if (req.method === "DELETE") { convos.remove(c.id); return json({ ok: true }); }
+      // conversa ao vivo (SSE): a página recebe cada mudança em vez de ficar perguntando
+      if (req.method === "GET" && action === "stream") {
+        srv.timeout(req, 0);
+        const enc = new TextEncoder();
+        let off: (() => void) | null = null, beat: any;
+        const end = () => { off?.(); off = null; clearInterval(beat); };
+        req.signal.addEventListener("abort", end);
+        return new Response(new ReadableStream({
+          start(ctrl) {
+            const write = (text: string) => { try { ctrl.enqueue(enc.encode(text)); } catch { end(); } };
+            off = convos.watch(c.id, (ev) => write(`data: ${JSON.stringify(ev)}\n\n`));
+            beat = setInterval(() => write(": vivo\n\n"), 15_000);
+          },
+          cancel: end,
+        }), { headers: { "content-type": "text/event-stream", "cache-control": "no-store" } });
+      }
       if (req.method === "POST" && action === "stop") { convos.stop(c.id); return json({ ok: true }); }
       if (req.method === "POST" && action === "review") {
         try { return json({ ok: true, reviewer: (await startReview(c, typeof body.target === "string" ? body.target : undefined)).id }); } catch (e: any) { return fail(e.message); }
@@ -858,9 +875,8 @@ const server = Bun.serve({
         const text = String(body.text || "").trim();
         if (!text && !asAttachments(body.attachments).length) return fail("escreva a mensagem");
         await Promise.all(accounts.filter((a) => !statusCache.has(a.id)).map(refreshStatus));
-        try { convos.send(c, text, { target: typeof body.target === "string" ? body.target : undefined, mode: body.mode ? asMode(body.mode) : undefined, brain: typeof body.brain === "boolean" ? body.brain : undefined, attachments: asAttachments(body.attachments) }); }
+        try { return json({ ok: true, queued: convos.send(c, text, { target: typeof body.target === "string" ? body.target : undefined, mode: body.mode ? asMode(body.mode) : undefined, brain: typeof body.brain === "boolean" ? body.brain : undefined, attachments: asAttachments(body.attachments) }) === "queued" }); }
         catch (e: any) { return fail(e.message); }
-        return json({ ok: true });
       }
       // a página pergunta com a revisão que já tem: sem mudança, resposta curta
       if (url.searchParams.get("rev") === String(c.rev)) return json({ rev: c.rev, same: true });
