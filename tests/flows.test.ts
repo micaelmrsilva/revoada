@@ -42,7 +42,7 @@ beforeAll(async () => {
   mkdirSync(mem, { recursive: true });
   writeFileSync(join(mem, "zebra-produto.md"), "---\nname: zebra-produto\ndescription: o que é o produto zebra\n---\nZebra é um app de listras para pequenas empresas.\n");
   writeFileSync(join(mem, "zebra-finance-visor.md"), "---\nname: zebra-finance-visor\ndescription: renda e orçamento\n---\nRenda mensal da zebra e saldo.\n");
-  writeFileSync(join(mem, "zebra-contato.md"), "---\nname: zebra-contato\ndescription: nota neutra\n---\nA zebra responde no endereço 16.59.23.249.\n");
+  writeFileSync(join(mem, "zebra-contato.md"), "---\nname: zebra-contato\ndescription: nota neutra\n---\nA zebra responde no endereço 203.0.113.7.\n");
   writeFileSync(join(HOME, ".claude/CLAUDE.md"), "# Regras\n\nSempre em pt-BR.\n");
   // histórico de outro programa: uma sessão do Claude Code e uma do Codex
   writeFileSync(join(HOME, PROJECT, "sessao-antiga.jsonl"), [

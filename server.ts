@@ -7,10 +7,13 @@ import { createBrain } from "./brain";
 import { createClones } from "./clones";
 import { createConvos, type Attachment, type Mode, type Usage } from "./convos";
 import { createHistory } from "./history";
+import { createRemote } from "./remote";
 
 const HOME = homedir();
 const ROOT = process.env.REVOADA_HOME || join(HOME, ".revoada");
 const PORT = Number(process.env.PORT || 4777);
+// porta do acompanhamento pelo celular: a única que escuta fora de 127.0.0.1, e só quando ligada
+const REMOTE_PORT = Number(process.env.REVOADA_REMOTE_PORT || PORT + 1);
 const PROFILES = join(ROOT, "profiles");
 // pasta onde ficam os seus repositórios: é onde o painel procura projetos, instruções e clones
 const PROJECTS = process.env.REVOADA_PROJECTS || join(HOME, "git");
@@ -184,7 +187,7 @@ const stripAnsi = (s: string) => s
 // ---------- limite e rodízio ----------
 type Limit = { until: number; reason: string; at: number };
 let limits: Record<string, Limit> = readJson(LIMITS_FILE) || {};
-const settings: { rotate: boolean; teach: boolean; onboarded: boolean; autoClean: boolean; importChats: boolean; keepAwake: boolean; lidAwake: boolean; lidFreeze: boolean } = { rotate: true, teach: false, onboarded: false, autoClean: false, importChats: false, keepAwake: true, lidAwake: false, lidFreeze: false, ...(readJson(SETTINGS_FILE) || {}) };
+const settings: { rotate: boolean; teach: boolean; onboarded: boolean; autoClean: boolean; importChats: boolean; keepAwake: boolean; lidAwake: boolean; lidFreeze: boolean; autoReview: boolean; remote: boolean; remoteSend: boolean } = { rotate: true, teach: false, onboarded: false, autoClean: false, importChats: false, keepAwake: true, lidAwake: false, lidFreeze: false, autoReview: false, remote: false, remoteSend: false, ...(readJson(SETTINGS_FILE) || {}) };
 // o que a janela nativa informa sobre a vigília (só existe no app desktop)
 let vigil: Record<string, unknown> | null = null;
 // consumo de cada conta nas janelas do provedor (5h, 7 dias), lido do que o próprio CLI informa
@@ -471,6 +474,48 @@ async function restoreWorktree(wt: Worktree) {
   throw new Error("a cópia isolada desta conversa foi removida e não consegui recriar");
 }
 
+// o que mudou numa pasta de trabalho. Numa cópia isolada interessa tudo desde que ela se separou
+// da principal, com commit ou sem.
+async function workDiff(dir: string, main?: string | null) {
+  const info = await repoInfo(dir);
+  if (!info) return null;
+  let base = "HEAD";
+  if (main) { const head = (await git(main, "rev-parse", "HEAD")).out; const mb = (await git(dir, "merge-base", "HEAD", head)).out; if (mb) base = mb; }
+  const [status, patch, commits] = await Promise.all([git(dir, "status", "--porcelain"), git(dir, "diff", base), base === "HEAD" ? Promise.resolve({ out: "" }) : git(dir, "log", "--oneline", `${base}..HEAD`)]);
+  return { branch: info.branch, root: info.root, files: status.out ? status.out.split("\n") : [], commits: commits.out ? commits.out.split("\n") : [], patch: patch.out };
+}
+
+// ---------- revisão cruzada ----------
+const REVIEW_PATCH_CHARS = 60_000;
+const REVIEW_NEW_FILES = 20;
+// quem revisa: de preferência outro provedor (outro modelo erra em lugares diferentes);
+// sem outro provedor pronto, outra conta do mesmo; em último caso a mesma conta, em sessão nova
+function pickReviewer(c: { provider: string; accountId: string | null }, target?: string) {
+  if (target) return target.startsWith("pool:") ? pickAccount(target.slice(5), []) : accounts.find((a) => a.id === target && statusCache.get(a.id)?.ok && !activeLimit(a.id));
+  for (const p of ["codex", "claude", "gemini", "grok"]) { if (p === c.provider) continue; const a = pickAccount(p, []); if (a) return a; }
+  return pickAccount(c.provider, c.accountId ? [c.accountId] : []) || pickAccount(c.provider, []);
+}
+async function startReview(c: NonNullable<ReturnType<typeof convos.get>>, target?: string) {
+  if (c.working) throw new Error("o agente ainda está respondendo");
+  const d = await workDiff(c.cwd, c.worktree?.main);
+  if (!d) throw new Error("esta pasta não é um repositório git; não há mudança para revisar");
+  // arquivo novo ainda fora do git não aparece no diff: entra como arquivo inteiro
+  let patch = d.patch;
+  const fresh = (await git(c.cwd, "ls-files", "--others", "--exclude-standard")).out.split("\n").filter(Boolean);
+  for (const f of fresh.slice(0, REVIEW_NEW_FILES)) {
+    if (patch.length > REVIEW_PATCH_CHARS) break;
+    try { if (statSync(join(c.cwd, f)).size > 40_000) continue; } catch { continue; }
+    patch += "\n" + (await git(c.cwd, "diff", "--no-index", "--", "/dev/null", f)).out;
+  }
+  if (!patch.trim()) throw new Error("nada mudou nos arquivos desta conversa; não há o que revisar");
+  await Promise.all(accounts.filter((a) => !statusCache.has(a.id)).map(refreshStatus));
+  const acc = pickReviewer(c, target);
+  if (!acc) throw new Error("nenhuma conta pronta para revisar");
+  lastUsed[acc.id] = Date.now();
+  convos.review(c, { acc, patch: patch.slice(0, REVIEW_PATCH_CHARS), files: [...d.files.map((f) => f.slice(3)), ...d.commits.map((x) => `commit ${x}`)], truncated: patch.length > REVIEW_PATCH_CHARS });
+  return acc;
+}
+
 // ---------- conversas (modo estruturado dos CLIs) ----------
 const accName = (a?: { provider: string; label: string }) => (a ? `${PROVIDERS[a.provider].name} · ${a.label}` : "conta removida");
 const ATTACH = join(ROOT, "attachments");
@@ -506,6 +551,11 @@ const convos = createConvos({
   brainContext: (q, hint) => brain.context(q, hint),
   onIdle: () => setTimeout(autoClean, 5000),
   prepare: async (c) => { if (c.worktree) await restoreWorktree(c.worktree); },
+  // revisão automática: só quando a resposta mexeu em arquivo, e nunca revisão de revisão
+  afterDone: (c, msg) => {
+    if (!settings.autoReview || msg.review || !msg.items?.some((i) => i.kind === "files")) return;
+    startReview(c).catch(() => {});
+  },
 });
 const asMode = (m: unknown): Mode => (m === "read" || m === "full" || m === "ask" ? m : "edit");
 // só aceita anexo que este servidor gravou
@@ -517,6 +567,23 @@ const history = createHistory({
   skipCwd: (cwd) => cwd === TITLES || cwd.startsWith(ROOT + "/") || cwd.startsWith("/private/tmp/") || cwd.startsWith("/tmp/"),
   known: () => new Set(convos.natives()),
 });
+
+// ---------- acompanhar pelo celular ----------
+const remote = createRemote({
+  port: REMOTE_PORT, file: join(ROOT, "remote.json"), publicDir: PUBLIC,
+  accounts: () => accounts.filter((a) => statusCache.get(a.id)?.ok).map((a) => ({ name: accName(a), ok: true, limitUntil: activeLimit(a.id)?.until || null, usage: liveUsage(a.id).map((u) => ({ key: u.key, pct: u.pct })) })),
+  accName: (id) => accName(id ? account(id) : undefined),
+  convos: () => convos.list().map((c) => ({ id: c.id, title: c.title, cwd: c.cwd, at: c.at, working: c.working, waiting: c.waiting, accountId: c.accountId })),
+  convo: (id) => convos.get(id),
+  decide: (id, req, allow) => convos.decide(id, req, allow ? "allow" : "deny"),
+  stop: (id) => convos.stop(id),
+  send: (c, text) => convos.send(c, text),
+  canSend: () => settings.remoteSend,
+});
+function applyRemote() {
+  try { settings.remote ? remote.start() : remote.stop(); }
+  catch (e: any) { settings.remote = false; throw new Error(`não consegui abrir a porta ${REMOTE_PORT}: ${e?.message || e}`); }
+}
 
 // ---------- cópias de repositório deixadas pelos agentes ----------
 const clones = createClones({
@@ -661,7 +728,7 @@ async function state(refresh: boolean) {
     sessions: [...sessions.values()].map((s) => ({ ...sessionMeta(s), alive: s.alive, busy: s.alive && Date.now() - s.lastOut < BUSY_MS })),
     runs: runs.map((r) => ({ id: r.id, title: r.prompt, cwd: r.cwd, at: r.at, running: r.jobs.some((j) => j.state === "rodando"), jobs: r.jobs.length })),
     brain: brain.info(),
-    clones: clones.summary(), cleaned, vigil,
+    clones: clones.summary(), cleaned, vigil, remote: { on: remote.on, port: REMOTE_PORT },
     convos: convos.list(),
     history: settings.importChats ? history.list() : [],
   };
@@ -777,6 +844,9 @@ const server = Bun.serve({
       if (!c) return fail("conversa não existe", 404);
       if (req.method === "DELETE") { convos.remove(c.id); return json({ ok: true }); }
       if (req.method === "POST" && action === "stop") { convos.stop(c.id); return json({ ok: true }); }
+      if (req.method === "POST" && action === "review") {
+        try { return json({ ok: true, reviewer: (await startReview(c, typeof body.target === "string" ? body.target : undefined)).id }); } catch (e: any) { return fail(e.message); }
+      }
       if (req.method === "POST" && action === "decide") {
         try { convos.decide(c.id, String(body.req), body.decision === "always" ? "always" : body.decision === "allow" ? "allow" : "deny"); } catch (e: any) { return fail(e.message); }
         return json({ ok: true });
@@ -809,6 +879,19 @@ const server = Bun.serve({
 
     if (resource === "vigil" && req.method === "POST") { vigil = body; return json({ ok: true }); }
 
+    // o código de acesso só sai por aqui, pra página local montar o QR
+    if (resource === "remote") {
+      if (req.method === "POST") {
+        try {
+          if (typeof body.on === "boolean") { settings.remote = body.on; applyRemote(); }
+          if (typeof body.send === "boolean") settings.remoteSend = body.send;
+          if (body.rotate) remote.rotate();
+        } catch (e: any) { return fail(e.message); }
+        finally { writeFileSync(SETTINGS_FILE, JSON.stringify(settings)); }
+      }
+      return json({ ...remote.info(), send: settings.remoteSend });
+    }
+
     if (resource === "rename" && req.method === "POST") {
       const title = String(body.title || "").trim().slice(0, 80);
       if (!title) return fail("o título não pode ficar vazio");
@@ -821,14 +904,9 @@ const server = Bun.serve({
     // o que mudou na pasta de trabalho: arquivos pendentes e o diff, pra revisar o que o agente fez
     if (resource === "diff") {
       const dir = validCwd(url.searchParams.get("cwd"));
-      const info = dir ? await repoInfo(dir) : null;
-      if (!dir || !info) return json({ repo: false });
-      // numa cópia isolada interessa tudo desde que ela se separou da principal, com commit ou sem
-      let base = "HEAD";
-      const main = url.searchParams.get("main");
-      if (main) { const head = (await git(main, "rev-parse", "HEAD")).out; const mb = (await git(dir, "merge-base", "HEAD", head)).out; if (mb) base = mb; }
-      const [status, patch, commits] = await Promise.all([git(dir, "status", "--porcelain"), git(dir, "diff", base), base === "HEAD" ? Promise.resolve({ out: "" }) : git(dir, "log", "--oneline", `${base}..HEAD`)]);
-      return json({ repo: true, branch: info.branch, files: status.out ? status.out.split("\n") : [], commits: commits.out ? commits.out.split("\n") : [], patch: patch.out.slice(0, 300_000), truncated: patch.out.length > 300_000 });
+      const d = dir ? await workDiff(dir, url.searchParams.get("main")) : null;
+      if (!d) return json({ repo: false });
+      return json({ repo: true, branch: d.branch, files: d.files, commits: d.commits, patch: d.patch.slice(0, 300_000), truncated: d.patch.length > 300_000 });
     }
 
     if (resource === "repo") {
@@ -851,7 +929,7 @@ const server = Bun.serve({
       if (typeof body.rotate === "boolean") settings.rotate = body.rotate;
       if (typeof body.onboarded === "boolean") settings.onboarded = body.onboarded;
       if (typeof body.importChats === "boolean") settings.importChats = body.importChats;
-      for (const k of ["keepAwake", "lidAwake", "lidFreeze"] as const) if (typeof body[k] === "boolean") settings[k] = body[k];
+      for (const k of ["keepAwake", "lidAwake", "lidFreeze", "autoReview"] as const) if (typeof body[k] === "boolean") settings[k] = body[k];
       if (typeof body.autoClean === "boolean") { settings.autoClean = body.autoClean; if (body.autoClean) setTimeout(autoClean, 500); }
       if (typeof body.teach === "boolean") { settings.teach = body.teach; teachAll(body.teach); }
       writeFileSync(SETTINGS_FILE, JSON.stringify(settings));
@@ -961,6 +1039,7 @@ const server = Bun.serve({
 
 function shutdown() {
   convos.flush();
+  remote.stop();
   for (const s of sessions.values()) if (s.alive) { s.alive = false; archive(s); s.proc.kill(); }
   process.exit(0);
 }
@@ -970,4 +1049,5 @@ clones.scan().catch(() => {});
 try { brain.sync(); } catch (e) { console.error("cérebro: falha ao sincronizar", e); }
 // mantém o bloco de instruções em dia (caminho do cofre, texto) nas contas já ensinadas
 if (settings.teach) teachAll(true);
+try { applyRemote(); } catch (e: any) { console.error(e.message); }
 console.log(`revoada em http://127.0.0.1:${server.port}  (perfis em ${ROOT})`);
