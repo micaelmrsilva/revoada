@@ -9,13 +9,13 @@ Um app para macOS que junta as suas contas de agentes de código (Claude Code, C
 - **Várias contas por provedor.** Cada conta é um perfil com configuração isolada. O login é o do CLI oficial; a Revoada não copia token nem fala com a API por conta própria.
 - **Conversa de verdade.** Mensagens, texto formatado, comandos com a saída, arquivos editados e o diff do que mudou, em vez da tela crua do terminal. O terminal de cada agente continua disponível.
 - **Rodízio que leva a conversa.** Quando uma conta bate no limite, o pedido continua na próxima, com o histórico do que foi dito e feito. Vale também para trocar de agente à mão, até entre provedores.
-- **Permissão por ação.** No modo "Pergunta antes", o agente para e mostra o comando ou o arquivo antes de agir. Você permite, permite sempre naquela conversa, ou nega.
+- **Permissão por ação.** No modo "Pergunta antes", o agente para e mostra o comando ou o arquivo antes de agir. Você permite, permite sempre naquela conversa, ou nega. O que só lê roda direto, sem perguntar.
 - **Consumo à vista.** Quanto cada conta já usou das janelas do provedor, e o rodízio começa pela mais folgada. Cada resposta mostra os tokens que gastou.
 - **Revisão cruzada.** Uma conta de outro provedor lê o que o agente mudou, sem poder editar, e aponta defeitos na própria conversa. Um botão manda os achados de volta para o autor corrigir. Pode rodar sozinha a cada resposta que mexe em arquivo.
 - **Acompanhar pelo celular.** Uma página leve, em outro aparelho da sua rede, para ver o que está rodando, permitir ou negar um pedido e parar um agente. Desligada por padrão.
 - **Cérebro compartilhado.** Um cofre do [Obsidian](https://obsidian.md) que espelha a memória de cada agente e entrega as notas relevantes como contexto de cada pedido, para qualquer conta. Temas sensíveis (finanças, infraestrutura) ficam de fora.
 - **Cópia isolada por tarefa.** Cada tarefa paralela pode rodar num `git worktree` próprio, que some sozinho quando o trabalho vira PR. Também acha e limpa os clones que os agentes deixam para trás.
-- **Conversas dos outros programas.** O que o Claude Code e o Codex já guardaram na máquina aparece na lateral e continua na sessão original.
+- **Conversas dos outros programas.** O que o Claude Code e o Codex já guardaram na máquina aparece na lateral e continua na sessão original. Chamada avulsa de script (`claude -p`, `codex exec` com um pedido só) fica de fora.
 - **Mac acordado enquanto os agentes trabalham**, e só enquanto trabalham. Com a tampa fechada também, depois de um passo de administrador.
 - **Barra de menus.** Um painel com o que está rodando, limites e um campo de pedido rápido (`⌃⌥Espaço`).
 
@@ -55,6 +55,7 @@ A Revoada é um servidor local em Bun com uma página, embrulhado numa janela na
 | `brain.ts` | Cérebro: espelho da memória dos agentes num cofre, regras de bloqueio e busca. |
 | `clones.ts` | Cópias de repositório: detecção, classificação e limpeza. |
 | `history.ts` | Leitura do histórico do Claude Code e do Codex. |
+| `safe.ts` | Decide se um comando só lê, para rodar sem perguntar no modo "Pergunta antes". |
 | `remote.ts` | Acompanhamento pelo celular: a segunda porta, o código de acesso e a API reduzida. |
 | `public/` | A página principal (`index.html`), o painel da barra de menus (`mini.html`) e a página do celular (`remoto.html`). |
 | `desktop/` | A janela nativa em Swift: sobe o servidor, barra de menus, avisos e vigília. |
@@ -74,7 +75,7 @@ A Revoada executa agentes que rodam comandos na sua máquina. Por isso:
 - O servidor só escuta em `127.0.0.1` e recusa qualquer chamada cuja origem não seja a própria página.
 - O acompanhamento pelo celular é a única coisa que escuta na rede, e só quando você liga. É outra porta (a do painel mais um), com uma API própria e pequena: ver conversas e limites, permitir ou negar, parar e, com uma segunda chave, escrever numa conversa que já existe. Criar conta, abrir terminal, mudar ajuste e ler o cérebro não existem ali. O acesso é por um código aleatório que vai no QR; errar oito vezes bloqueia o aparelho por dez minutos, e trocar o código derruba todos os pareados. **A conexão não é cifrada**: use na rede de casa ou pelo Tailscale, nunca em Wi-Fi público. Com a chave de escrever ligada, quem tiver o código manda pedidos aos seus agentes.
 - Nenhum token ou credencial passa pelo app: a autenticação é toda dos CLIs.
-- No modo "Pergunta antes" o agente não age sem sua resposta. Hoje só o Claude oferece isso; os outros caem para "Pode editar", com aviso na conversa.
+- No modo "Pergunta antes" o agente não age sem sua resposta, com uma exceção que você pode desligar em Ajustes: o que só lê (listar, buscar, ver arquivo, consultar o git e o GitHub) roda direto. A regra é uma lista do que se sabe seguro, em `safe.ts`: redirecionamento para arquivo, substituição de comando, segundo plano e qualquer programa fora da lista continuam perguntando. Ler não tem limite de pasta, então um comando de leitura pode mostrar ao agente um arquivo sensível fora do projeto. Hoje só o Claude oferece isso; os outros caem para "Pode editar", com aviso na conversa.
 - Notas de tema bloqueado não são copiadas para o cofre nem enviadas como contexto. O bloqueio vale para o que a Revoada envia; um agente com acesso a arquivos ainda pode ler a pasta de memória de outro.
 - Usar várias contas pode ter regras próprias em cada provedor. Leia os termos de uso de cada um.
 

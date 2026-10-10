@@ -58,8 +58,8 @@
   .item { display: flex; align-items: center; gap: 10px; width: 100%; padding: 7px 10px; border-radius: 9px; color: var(--text); min-width: 0; }
   .item:hover, .item.on { background: var(--soft); }
   .item .t { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .item .x { visibility: hidden; color: var(--faint); padding: 0 4px; border-radius: 4px; }
-  .item:hover .x { visibility: visible; } .item .x:hover { color: var(--red); }
+  .item .x { display: none; color: var(--faint); padding: 0 4px; border-radius: 4px; }
+  .item:hover .x { display: inline; } .item .x:hover { color: var(--red); }
   .scroll { flex: 1; min-height: 0; overflow-y: auto; padding: 0 8px 12px; }
   .scroll h4 { font-weight: 400; font-size: 13px; color: var(--mute); margin: 20px 10px 6px; }
   .folder { font-weight: 500; }
@@ -161,10 +161,11 @@
 
   /* conversa estruturada */
   .chatscroll { flex: 1; min-height: 0; overflow-y: auto; padding: 26px 24px 30px; }
-  .msgs { max-width: 760px; margin: 0 auto; display: grid; gap: 22px; }
+  .msgs { max-width: 760px; margin: 0 auto; display: grid; grid-template-columns: minmax(0, 1fr); gap: 22px; }
+  .m.bot > .part { min-width: 0; } .m.user > .part { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; width: 100%; }
   .m.user { display: flex; justify-content: flex-end; }
   .bubble { background: var(--soft); border-radius: 18px; padding: 10px 16px; max-width: 86%; white-space: pre-wrap; word-break: break-word; }
-  .m.bot { display: grid; gap: 10px; min-width: 0; }
+  .m.bot { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; min-width: 0; }
   .who { font-size: 12.5px; color: var(--mute); display: flex; gap: 10px; align-items: center; }
   .who b { color: var(--text); font-weight: 600; } .who .b { color: var(--teal); }
   .md { line-height: 1.62; font-size: 14.5px; min-width: 0; overflow-wrap: anywhere; }
@@ -203,13 +204,14 @@
   .m.user { flex-direction: column; align-items: flex-end; gap: 6px; }
   .m.user .atts { padding: 0; justify-content: flex-end; }
   .m.user .att img { width: 72px; height: 72px; border-radius: 9px; } .m.user .att { padding: 4px; }
-  .askcard { border: 1px solid color-mix(in srgb, var(--amber) 55%, var(--line)); border-radius: 12px; padding: 12px 14px; display: grid; gap: 10px; }
+  .askcard { border: 1px solid color-mix(in srgb, var(--amber) 55%, var(--line)); border-radius: 12px; padding: 12px 14px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; }
   .askcard.done { border-color: var(--line); padding: 8px 12px; display: flex; gap: 10px; align-items: center; color: var(--mute); font-size: 13px; }
-  .askcard .q { font-weight: 550; } .askcard code { display: block; font: 12.5px/1.5 "Geist Mono", ui-monospace, monospace; background: var(--soft); border-radius: 8px; padding: 8px 10px; white-space: pre-wrap; word-break: break-word; max-height: 180px; overflow-y: auto; }
+  .askcard .q { font-weight: 550; } .askcard code { display: block; font: 12.5px/1.5 "Geist Mono", ui-monospace, monospace; background: var(--soft); border-radius: 8px; padding: 8px 10px; white-space: pre-wrap; word-break: break-word; max-height: 340px; overflow-y: auto; }
   #phoneDlg { width: min(560px, 92vw); } #phoneDlg header { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; } #phoneDlg h2 { margin: 0 0 4px; font-size: 17px; } #phoneDlg header small { color: var(--mute); } #phoneBody { display: grid; gap: 6px; padding-top: 8px; }
   .pair { display: grid; grid-template-columns: 148px 1fr; gap: 18px; align-items: center; padding: 12px; }
   .pair .qr { background: #fff; border-radius: 10px; padding: 6px; line-height: 0; } .pair .qr svg { width: 100%; height: auto; }
   .pair p { margin: 6px 0 10px; color: var(--mute); font-size: 13px; }
+  .askcard kbd { font: 10.5px "Geist Mono", ui-monospace, monospace; opacity: .55; margin-left: 7px; }
   .askcard .btns { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
   .askcard .btns .btn { padding: 6px 14px; font-size: 13px; } .askcard .btns .btn.line { border-radius: 999px; }
   .dot.wait { background: var(--amber); animation: pulse 1.1s ease-in-out infinite; }
@@ -458,6 +460,7 @@ function paintSettings() {
     + row("teach", S.settings.teach, "Agentes salvam no cérebro", "Cada agente aprende, pelas instruções globais dele, a guardar no cofre o que for durável.")
     + row("importChats", S.settings.importChats, "Conversas dos outros programas", "Mostra na lateral o que o Claude Code e o Codex já guardaram nesta máquina, para continuar daqui.")
     + row("autoClean", S.settings.autoClean, "Limpeza de clones", "Cópias de repositório que já viraram PR e não têm nada pendente vão sozinhas para a Lixeira.")
+    + row("autoRead", S.settings.autoRead, "Leitura sem perguntar", "No modo \"Pergunta antes\", o que só lê (listar, buscar, ver arquivo, consultar o git e o GitHub) roda direto. Escrever, apagar, instalar e qualquer comando que a Revoada não reconheça continuam pedindo permissão.")
     + row("autoReview", S.settings.autoReview, "Revisão automática", "Quando um agente mexe em arquivo, uma conta de outro provedor revisa o resultado em seguida. Gasta uso da conta que revisa.")
     + `<button class="set" id="openPhone"><b>Acompanhar pelo celular</b><span class="tag ${S.remote?.on ? "ok" : "mute"}">${S.remote?.on ? "Ligado" : "Desligado"}</span><small>Ver os agentes, permitir ou negar um pedido e parar, de outro aparelho na sua rede.</small></button>`
     + (S.vigil ? `<span class="label" style="padding-top:14px">Mac acordado</span>`
@@ -566,8 +569,8 @@ function allThreads() {
 }
 function threadRow(t, cls) {
   const on = view.type === t.type && view.id === t.id;
-  return `<button class="item ${cls} ${on ? "on" : ""}" data-open="${t.type}:${t.id}" title="${esc(t.title)}${t.type === "run" ? "" : "\nDuplo clique para renomear"}">
-    <span class="t">${esc(t.title)}</span>${t.src ? `<span class="src">${esc(t.src)}</span>` : ""}${t.wait ? '<i class="dot wait" title="esperando sua permissão"></i>' : t.limit ? '<i class="dot"></i>' : t.busy ? '<i class="dot busy" title="trabalhando"></i>' : t.live ? '<i class="dot live" title="aberta, parada"></i>' : ""}${t.type === "imp" ? "" : `<span class="x" data-del="${t.type}:${t.id}" role="button" aria-label="Apagar conversa" title="Apagar conversa">×</span>`}</button>`;
+  return `<button class="item ${cls} ${on ? "on" : ""}" data-open="${t.type}:${t.id}" title="${esc(t.title)}${t.src ? `\nVeio do ${t.src === "codex" ? "Codex" : "Claude Code"}` : ""}${t.type === "run" ? "" : "\nDuplo clique para renomear"}">
+    <span class="t">${esc(t.title)}</span>${t.wait ? '<i class="dot wait" title="esperando sua permissão"></i>' : t.limit ? '<i class="dot"></i>' : t.busy ? '<i class="dot busy" title="trabalhando"></i>' : t.live ? '<i class="dot live" title="aberta, parada"></i>' : ""}${t.type === "imp" ? "" : `<span class="x" data-del="${t.type}:${t.id}" role="button" aria-label="Apagar conversa" title="Apagar conversa">×</span>`}</button>`;
 }
 function renderThreads() {
   if (document.querySelector("#threads input.rename")) return; // não redesenha no meio de um renomear
@@ -649,7 +652,7 @@ function paintComposer() {
   $("heroDir").textContent = base(cwd() || "~");
   $("dirChip").innerHTML = `${ICON.folder}${esc(short(inChat && chat ? chat.cwd : cwd()))}`;
   $("dirChip").disabled = inChat;
-  $("prompt").placeholder = inChat ? "Responder" : "Peça qualquer coisa";
+  $("prompt").placeholder = !inChat ? "Peça qualquer coisa" : chat?.waiting ? "Enter permite, Esc nega" : busy ? "O agente está respondendo" : "Responder";
   const ts = targets();
   $("targetChip").innerHTML = `${esc(!ts.length ? "Nenhuma conta pronta" : ts.length === 1 ? targetName(ts[0]) : `${ts.length} contas em paralelo`)}${ICON.down}`;
   $("brainChip").innerHTML = `${ICON.brain}Cérebro`; $("brainChip").classList.toggle("on", useBrain);
@@ -714,16 +717,35 @@ $("isoChip").onclick = () => { isolate = !willIsolate(targets()); paintComposer(
 function peek() {
   clearTimeout(peek.t);
   const q = $("prompt").value.trim();
+  // conversa que retoma a sessão do agente não recebe o cérebro de novo: prometer nota aqui seria mentira
+  const t = view.type === "chat" && chat?.native ? targets()[0] || "" : "";
+  if (t && (t === chat.native.accountId || t === `pool:${chat.provider}`)) return ($("notes").textContent = "");
   if (!useBrain || q.length < 8) return ($("notes").textContent = useBrain ? "" : "cérebro desligado");
   peek.t = setTimeout(async () => {
     const hits = await api(`brain/search?ctx=1&n=4&hint=${encodeURIComponent(base(cwd()))}&q=${encodeURIComponent(q)}`).catch(() => []);
+    if ($("prompt").value.trim() !== q) return; // o pedido já foi enviado ou mudou: esta resposta é velha
     const names = [...new Set(hits.map((h) => h.title.split(" › ")[0]))];
     $("notes").textContent = names.length ? `vai junto do cérebro: ${names.join(", ")}` : "nada do cérebro combina com este pedido";
     $("notes").title = names.join("\n");
   }, 350);
 }
 $("prompt").oninput = () => { const t = $("prompt"); t.style.height = "auto"; t.style.height = Math.min(t.scrollHeight, 240) + "px"; peek(); };
-$("prompt").onkeydown = (e) => { if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); $("send").click(); } };
+$("prompt").onkeydown = (e) => {
+  if (e.key !== "Enter" || e.shiftKey || e.isComposing) return;
+  e.preventDefault();
+  // parar é só pelo botão: Enter no meio de uma resposta não pode derrubar o agente
+  if (view.type === "chat" && chat?.working) { if (!chat.waiting && $("prompt").value.trim()) toast("O agente ainda está respondendo. Sua mensagem fica no campo; envie quando ele terminar."); return; }
+  $("send").click();
+};
+addEventListener("keydown", (e) => {
+  if (view.type !== "chat" || !chat?.waiting || e.metaKey || e.ctrlKey || e.altKey || e.isComposing || document.querySelector("dialog[open]")) return;
+  if (e.key !== "Enter" && e.key !== "Escape") return;
+  const el = document.activeElement, typing = el && /^(INPUT|TEXTAREA)$/.test(el.tagName);
+  if (typing && (el.id !== "prompt" || el.value.trim())) return;
+  if (el?.tagName === "BUTTON" && e.key === "Enter") return; // o botão em foco já responde sozinho
+  const b = document.querySelector(`#msgs [data-decide="${e.key === "Enter" ? "allow" : "deny"}"]:not(:disabled)`);
+  if (b) { e.preventDefault(); b.click(); }
+});
 $("send").onclick = async () => {
   if (view.type === "chat" && chat?.working) return api(`convos/${chat.id}/stop`, "POST", {});
   const ts = targets(); if (!ts.length) return toast("Nenhuma conta pronta. Faça login em Contas.");
@@ -771,7 +793,7 @@ function itemHtml(it, key) {
     const what = { Bash: "rodar este comando", Edit: "editar este arquivo", Write: "criar este arquivo", MultiEdit: "editar este arquivo", WebFetch: "abrir este endereço", Read: "ler este arquivo" }[it.tool] || `usar ${it.tool}`;
     if (it.state !== "pending") return `<div class="askcard done"><span class="tag ${it.state === "allowed" ? "ok" : "red"}">${it.state === "allowed" ? "Permitido" : "Negado"}</span><span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(it.tool)} · ${esc(it.detail)}</span></div>`;
     return `<div class="askcard"><span class="q">O agente quer ${what}:</span><code>${esc(it.detail)}</code>
-      <div class="btns"><button class="btn" data-decide="allow" data-req="${esc(it.req)}">Permitir</button><button class="btn line" data-decide="always" data-req="${esc(it.req)}" title="Não pergunta mais sobre ${esc(it.tool)} nesta conversa">Sempre nesta conversa</button><button class="link" data-decide="deny" data-req="${esc(it.req)}">Negar</button></div></div>`;
+      <div class="btns"><button class="btn" data-decide="allow" data-req="${esc(it.req)}">Permitir<kbd>↵</kbd></button><button class="btn line" data-decide="always" data-req="${esc(it.req)}" title="Não pergunta mais sobre ${esc(it.tool)} nesta conversa">Sempre nesta conversa</button><button class="link" data-decide="deny" data-req="${esc(it.req)}">Negar<kbd>esc</kbd></button></div></div>`;
   }
   if (it.kind === "think") return `<details class="act" data-key="${key}" ${open}><summary><span class="ic">~</span><span class="what plain">Raciocínio</span></summary><div class="think md">${md(it.text)}</div></details>`;
   if (it.kind === "cmd") { const run = it.exit == null && it.status !== "failed"; return `<details class="act" data-key="${key}" ${open}><summary><span class="ic">$</span><span class="what">${esc(it.command)}</span><span class="st ${run ? "run" : it.exit ? "bad" : ""}">${run ? "rodando" : it.exit ? `saiu com ${it.exit}` : "ok"}</span></summary><pre>${esc(it.output) || "sem saída"}</pre></details>`; }
@@ -780,14 +802,35 @@ function itemHtml(it, key) {
   if (it.kind === "todo") return `<div class="act"><ul class="todo">${it.items.map((t) => `<li class="${t.done ? "done" : ""}">${t.done ? "✓" : "○"} ${esc(t.text)}</li>`).join("")}</ul></div>`;
   return "";
 }
-function msgHtml(m, i) {
-  if (m.role === "user") return (m.attachments?.length ? `<div class="atts">${m.attachments.map((a) => attHtml(a)).join("")}</div>` : "") + (m.text ? `<div class="bubble">${esc(m.text)}</div>` : "");
-  const took = Math.round(((m.endedAt || Date.now()) - m.at) / 1000);
-  return `<div class="who">${m.review ? `<span class="tag ok">Revisão</span>` : ""}<b>${esc(accName(acc(m.accountId)))}</b>${m.state === "working" ? "" : `<span class="num">${took}s</span>`}${m.tokens ? `<span class="num" title="${esc(tokTitle(m.tokens))}">${tok(m.tokens.in + m.tokens.out + m.tokens.cache)} tokens</span>` : ""}${m.brain?.length ? `<span class="b" title="${esc(m.brain.join("\n"))}">${plural(m.brain.length, "nota", "notas")} do cérebro</span>` : ""}${m.state === "stopped" ? "<span>interrompido</span>" : ""}</div>`
-    + (m.items || []).map((it) => itemHtml(it, `${i}:${it.k}`)).join("")
+// o que a pessoa colou vem com buracos; o aviso de interrupção do CLI não é fala dela
+const tidy = (t) => String(t || "").replace(/\n{3,}/g, "\n\n").trim();
+const INTERRUPTED = /^\[Request interrupted by user[^\]]*\]$/;
+// Cada resposta vira uma lista de partes com chave. A tela só troca a parte que mudou, então texto
+// chegando não redesenha os comandos de cima nem desfaz seleção e rolagem do resto.
+function msgParts(m, i) {
+  if (m.role === "user") {
+    const text = tidy(m.text);
+    if (INTERRUPTED.test(text)) return [["u", `<div class="sys mute">Você interrompeu a resposta.</div>`]];
+    return [["u", (m.attachments?.length ? `<div class="atts">${m.attachments.map((a) => attHtml(a)).join("")}</div>` : "") + (text ? `<div class="bubble">${esc(text)}</div>` : "")]];
+  }
+  const took = Math.round(((m.endedAt || Date.now()) - m.at) / 1000), items = m.items || [];
+  // o cartão de permissão já mostra o comando: a linha dele some enquanto espera, e depois de permitido fica só a linha
+  const same = (ask, it) => (it.kind === "cmd" && it.command === ask.detail) || (it.kind === "files" && it.changes.some((c) => c.path === ask.detail));
+  const pending = items.filter((x) => x.kind === "ask" && x.state === "pending");
+  const parts = [["who", `<div class="who">${m.review ? `<span class="tag ok">Revisão</span>` : ""}<b>${esc(accName(acc(m.accountId)))}</b>${m.state === "working" ? "" : `<span class="num">${took}s</span>`}${m.tokens ? `<span class="num" title="${esc(tokTitle(m.tokens))}">${tok(m.tokens.in + m.tokens.out + m.tokens.cache)} tokens</span>` : ""}${m.brain?.length ? `<span class="b" title="${esc(m.brain.join("\n"))}">${plural(m.brain.length, "nota", "notas")} do cérebro</span>` : ""}${m.state === "stopped" ? "<span>interrompido</span>" : ""}</div>`]];
+  for (const it of items) {
+    if (it.kind === "think" && !it.text.trim()) continue;
+    if (pending.some((a) => same(a, it))) continue;
+    if (it.kind === "ask" && it.state === "allowed" && items.some((x) => same(it, x))) continue;
+    const h = itemHtml(it, `${i}:${it.k}`);
+    if (h) parts.push([it.k, h]);
+  }
+  const tail = ""
     + (m.state === "working" ? (m.items?.some((i) => i.kind === "ask" && i.state === "pending") ? `<div class="working" style="color:var(--amber)"><i style="background:var(--amber)"></i>esperando você</div>` : `<div class="working"><i></i>trabalhando há <span class="num" data-since="${m.at}"></span></div>`) : "")
     + (m.error ? `<div class="sys red">${esc(m.error)}</div>` : "")
     + (m.review && m.state === "done" && i === chat.messages.length - 1 && !/^\s*nada a corrigir/i.test(reviewText(m)) ? `<div><button class="btn line" data-fix="${i}" title="Manda os achados para o agente que fez o trabalho. Ele confere cada um antes de mexer.">Mandar o autor corrigir</button></div>` : "");
+  if (tail) parts.push(["tail", tail]);
+  return parts;
 }
 const tok = (n) => (n >= 1e6 ? `${(n / 1e6).toFixed(1).replace(".", ",")}M` : n >= 1000 ? `${(n / 1000).toFixed(n >= 1e5 ? 0 : 1).replace(".", ",")}k` : String(n));
 const tokTitle = (t) => `entrada ${tok(t.in)} · saída ${tok(t.out)} · relido do cache ${tok(t.cache)}${t.usd != null ? ` · US$ ${t.usd.toFixed(2).replace(".", ",")}` : ""}`;
@@ -830,9 +873,14 @@ function renderChat() {
   chat.messages.forEach((m, i) => {
     let el = wrap.children[i];
     if (!el) { el = document.createElement("div"); wrap.appendChild(el); }
-    const sig = JSON.stringify(m);
-    if (el.dataset.sig === sig) return;
-    el.dataset.sig = sig; el.className = `m ${m.role === "user" ? "user" : "bot"}`; el.innerHTML = msgHtml(m, i);
+    el.className = `m ${m.role === "user" ? "user" : "bot"}`;
+    const parts = msgParts(m, i);
+    parts.forEach(([k, html], j) => {
+      let part = el.children[j];
+      if (!part || part.dataset.k !== k) { const n = document.createElement("div"); n.className = "part"; n.dataset.k = k; el.insertBefore(n, part || null); part = n; }
+      if (part.html !== html) { part.html = html; part.innerHTML = html; }
+    });
+    while (el.children.length > parts.length) el.lastChild.remove();
   });
   while (wrap.children.length > chat.messages.length) wrap.lastChild.remove();
   tickChat();

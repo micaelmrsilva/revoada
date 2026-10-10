@@ -206,6 +206,8 @@ export function createConvos(d: {
   makeTitle: (c: Convo) => Promise<string | null>;
   // resposta pronta: o servidor decide se pede revisão sozinho
   afterDone?: (c: Convo, msg: Msg) => void;
+  // no modo "perguntar": ação que pode seguir sem passar pelo usuário (só leitura)
+  autoAllow?: (tool: string, input: any) => boolean;
 }) {
   mkdirSync(d.dir, { recursive: true });
   const convos = new Map<string, Convo>();
@@ -297,7 +299,7 @@ export function createConvos(d: {
       // uma resposta pode passar por mais de uma conta (rodízio): soma
       tokens: (t) => { const m = (msg.tokens ||= { in: 0, out: 0, cache: 0 }); m.in += t.in; m.out += t.out; m.cache += t.cache; if (t.usd != null) m.usd = (m.usd || 0) + t.usd; },
       ask(req, tool, input) {
-        if (c.allow?.includes(tool)) return write(adapter.allow!(req, input));
+        if (c.allow?.includes(tool) || d.autoAllow?.(tool, input)) return write(adapter.allow!(req, input));
         const detail = tool === "Bash" ? input.command || "" : input.file_path || input.notebook_path || input.url || input.pattern || clip(input, 300);
         const it: Item = { k: `${attempt}:ask:${req}`, kind: "ask", req, tool, detail: String(detail), state: "pending" };
         items.push(it);

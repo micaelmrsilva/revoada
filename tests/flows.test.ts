@@ -58,9 +58,19 @@ beforeAll(async () => {
     { timestamp: "2026-01-01T10:00:01Z", type: "event_msg", payload: { type: "item_completed", item: { type: "UserMessage", content: [{ type: "text", text: "liste os arquivos" }] } } },
     { timestamp: "2026-01-01T10:00:02Z", type: "response_item", payload: { type: "message", role: "assistant", content: [{ type: "output_text", text: "Só a.txt." }] } },
   ].map((l) => JSON.stringify(l)).join("\n") + "\n");
+  // chamadas avulsas de script (um pedido, sem tela): não são conversa e não devem aparecer
+  writeFileSync(join(HOME, PROJECT, "avulsa.jsonl"), [
+    { type: "user", cwd: GIT, entrypoint: "sdk-cli", timestamp: "2026-01-01T11:00:00Z", message: { role: "user", content: "Responda só: ok" } },
+    { type: "assistant", cwd: GIT, entrypoint: "sdk-cli", timestamp: "2026-01-01T11:00:01Z", message: { id: "a9", content: [{ type: "text", text: "ok" }] } },
+  ].map((l) => JSON.stringify(l)).join("\n") + "\n" + " ".repeat(200));
+  writeFileSync(join(cx, "rollout-2026-01-01T11-00-00-avulsa1.jsonl"), [
+    { timestamp: "2026-01-01T11:00:00Z", type: "session_meta", payload: { id: "avulsa1", cwd: GIT, originator: "codex_exec", source: "exec" } },
+    { timestamp: "2026-01-01T11:00:01Z", type: "event_msg", payload: { type: "item_completed", item: { type: "UserMessage", content: [{ type: "text", text: "Responda só: ok" }] } } },
+    { timestamp: "2026-01-01T11:00:02Z", type: "response_item", payload: { type: "message", role: "assistant", content: [{ type: "output_text", text: "ok" }] } },
+  ].map((l) => JSON.stringify(l)).join("\n") + "\n");
   // os arquivos de histórico precisam parecer antigos o bastante pra não contarem como "abertos agora"
   const old = new Date(Date.now() - 3_600_000);
-  for (const f of [join(HOME, PROJECT, "sessao-antiga.jsonl"), join(cx, "rollout-2026-01-01T10-00-00-abc123.jsonl")]) require("fs").utimesSync(f, old, old);
+  for (const f of [join(HOME, PROJECT, "sessao-antiga.jsonl"), join(cx, "rollout-2026-01-01T10-00-00-abc123.jsonl"), join(HOME, PROJECT, "avulsa.jsonl"), join(cx, "rollout-2026-01-01T11-00-00-avulsa1.jsonl")]) require("fs").utimesSync(f, old, old);
 
   // repositório principal com origem, mais duas cópias: uma limpa e uma com trabalho local
   mkdirSync(GIT, { recursive: true });
@@ -187,6 +197,19 @@ describe("claude: texto ao vivo, consumo, título e permissão", () => {
     expect(c.messages.at(-1).items.find((i: any) => i.kind === "ask").state).toBe("allowed");
   }, SLOW);
 
+  test("o que só lê roda sem perguntar; com a chave desligada volta a perguntar", async () => {
+    const dir = join(HOME, "perm-leitura"); mkdirSync(dir);
+    const c = await idle(await chat("claude-padrao", "SO-LEITURA", { mode: "ask", cwd: dir }));
+    expect(c.messages.at(-1).items.some((i: any) => i.kind === "ask")).toBe(false);
+    expect(texts(c)).toBe("permitido");
+    await post("settings", { autoRead: false });
+    const id = await chat("claude-padrao", "SO-LEITURA", { mode: "ask", cwd: dir });
+    const waiting = await until(async () => { const x = await get(`convos/${id}`); return x.waiting && x; });
+    expect(waiting.messages.at(-1).items.find((i: any) => i.kind === "ask").detail).toBe("ls -la | head -5");
+    await post(`convos/${id}/stop`);
+    await post("settings", { autoRead: true });
+  }, SLOW);
+
   test("negar impede a ação", async () => {
     const dir = join(HOME, "perm-nao"); mkdirSync(dir);
     const id = await chat("claude-padrao", "crie o arquivo", { mode: "ask", cwd: dir });
@@ -287,6 +310,7 @@ describe("conversas dos outros programas", () => {
     const claude = h.items.find((e: any) => e.src === "claude"), codex = h.items.find((e: any) => e.src === "codex");
     expect(claude.title).toBe("Estado da zebra");
     expect(codex.title).toBe("liste os arquivos");
+    expect(h.items.some((e: any) => e.title.startsWith("Responda só"))).toBe(false);
     const c = await get(`convos/${(await post("history/open", { file: claude.file })).id}`);
     expect(c.native).toEqual({ accountId: "claude-padrao", sessionId: "sessao-antiga" });
     expect(c.messages.map((m: any) => m.role)).toEqual(["user", "assistant"]);

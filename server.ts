@@ -8,6 +8,7 @@ import { createClones } from "./clones";
 import { createConvos, type Attachment, type Mode, type Usage } from "./convos";
 import { createHistory } from "./history";
 import { createRemote } from "./remote";
+import { readOnlyTool } from "./safe";
 
 const HOME = homedir();
 const ROOT = process.env.REVOADA_HOME || join(HOME, ".revoada");
@@ -187,7 +188,7 @@ const stripAnsi = (s: string) => s
 // ---------- limite e rodízio ----------
 type Limit = { until: number; reason: string; at: number };
 let limits: Record<string, Limit> = readJson(LIMITS_FILE) || {};
-const settings: { rotate: boolean; teach: boolean; onboarded: boolean; autoClean: boolean; importChats: boolean; keepAwake: boolean; lidAwake: boolean; lidFreeze: boolean; autoReview: boolean; remote: boolean; remoteSend: boolean } = { rotate: true, teach: false, onboarded: false, autoClean: false, importChats: false, keepAwake: true, lidAwake: false, lidFreeze: false, autoReview: false, remote: false, remoteSend: false, ...(readJson(SETTINGS_FILE) || {}) };
+const settings: { rotate: boolean; teach: boolean; onboarded: boolean; autoClean: boolean; importChats: boolean; keepAwake: boolean; lidAwake: boolean; lidFreeze: boolean; autoReview: boolean; autoRead: boolean; remote: boolean; remoteSend: boolean } = { autoRead: true, rotate: true, teach: false, onboarded: false, autoClean: false, importChats: false, keepAwake: true, lidAwake: false, lidFreeze: false, autoReview: false, remote: false, remoteSend: false, ...(readJson(SETTINGS_FILE) || {}) };
 // o que a janela nativa informa sobre a vigília (só existe no app desktop)
 let vigil: Record<string, unknown> | null = null;
 // consumo de cada conta nas janelas do provedor (5h, 7 dias), lido do que o próprio CLI informa
@@ -551,6 +552,7 @@ const convos = createConvos({
   brainContext: (q, hint) => brain.context(q, hint),
   onIdle: () => setTimeout(autoClean, 5000),
   prepare: async (c) => { if (c.worktree) await restoreWorktree(c.worktree); },
+  autoAllow: (tool, input) => settings.autoRead && readOnlyTool(tool, input),
   // revisão automática: só quando a resposta mexeu em arquivo, e nunca revisão de revisão
   afterDone: (c, msg) => {
     if (!settings.autoReview || msg.review || !msg.items?.some((i) => i.kind === "files")) return;
@@ -929,7 +931,7 @@ const server = Bun.serve({
       if (typeof body.rotate === "boolean") settings.rotate = body.rotate;
       if (typeof body.onboarded === "boolean") settings.onboarded = body.onboarded;
       if (typeof body.importChats === "boolean") settings.importChats = body.importChats;
-      for (const k of ["keepAwake", "lidAwake", "lidFreeze", "autoReview"] as const) if (typeof body[k] === "boolean") settings[k] = body[k];
+      for (const k of ["keepAwake", "lidAwake", "lidFreeze", "autoReview", "autoRead"] as const) if (typeof body[k] === "boolean") settings[k] = body[k];
       if (typeof body.autoClean === "boolean") { settings.autoClean = body.autoClean; if (body.autoClean) setTimeout(autoClean, 500); }
       if (typeof body.teach === "boolean") { settings.teach = body.teach; teachAll(body.teach); }
       writeFileSync(SETTINGS_FILE, JSON.stringify(settings));

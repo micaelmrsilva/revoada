@@ -13,7 +13,8 @@ const now = Math.floor(Date.now() / 1000);
 out({ type: "system", subtype: "init", session_id: "s-claude" });
 out({ type: "rate_limit_event", rate_limit_info: { unifiedWindows: { five_hour: { utilization: 0.42, resetsAt: now + 3600 }, seven_day: { utilization: 0.1, resetsAt: now + 86400 } } } });
 if (a.includes("--permission-prompt-tool")) {
-  const input = { command: "touch feito.txt" };
+  // "SO-LEITURA" no pedido: o agente quer só listar; o resto quer criar arquivo
+  const input = { command: said.includes("SO-LEITURA") ? "ls -la | head -5" : "touch feito.txt" };
   out({ type: "assistant", message: { id: "m1", content: [{ type: "tool_use", id: "tu1", name: "Bash", input }] } });
   out({ type: "control_request", request_id: "r1", request: { subtype: "can_use_tool", tool_name: "Bash", input } });
   const answer = JSON.parse((await lines.next()).value).response.response;

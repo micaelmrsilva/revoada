@@ -28,14 +28,18 @@ function claudeText(content: any): string {
   return content.filter((b) => b.type === "text").map((b) => typed(b.text)).filter(Boolean).join("\n");
 }
 
+// Chamada avulsa: um pedido só, feito sem tela por um script (`claude -p`, `codex exec`). É teste
+// ou automação, não conversa que alguém vá querer continuar, e some da lista.
 function peekClaude(file: string): { cwd: string; title: string; sessionId: string } | null {
-  let cwd = "", title = "", first = "";
+  let cwd = "", title = "", first = "", asked = 0, headless = false;
   for (const j of jsonLines(head(file))) {
     if (j.isSidechain) continue;
     if (!cwd && j.cwd) cwd = j.cwd;
+    if (j.entrypoint === "sdk-cli") headless = true;
     if (j.type === "custom-title" && j.customTitle) title = j.customTitle;
-    if (!first && j.type === "user" && !j.isMeta && !j.isCompactSummary) first = claudeText(j.message?.content);
+    if (j.type === "user" && !j.isMeta && !j.isCompactSummary) { const t = claudeText(j.message?.content); if (t) { asked++; first ||= t; } }
   }
+  if (headless && asked <= 1 && !title) return null;
   if (!cwd || !(title || first)) return null;
   return { cwd, title: (title || first.split("\n")[0]).slice(0, 80), sessionId: basename(file, ".jsonl") };
 }
@@ -46,13 +50,14 @@ function codexUser(payload: any): string {
   return (it.content || []).map((c: any) => typed(c.text)).filter(Boolean).join("\n");
 }
 function peekCodex(file: string): { cwd: string; title: string; sessionId: string } | null {
-  let cwd = "", sessionId = "", first = "";
+  let cwd = "", sessionId = "", first = "", asked = 0, headless = false;
   for (const j of jsonLines(head(file))) {
     const p = j.payload || {};
-    if (j.type === "session_meta") { sessionId = p.id || p.session_id || ""; cwd ||= p.cwd || ""; }
+    if (j.type === "session_meta") { sessionId = p.id || p.session_id || ""; cwd ||= p.cwd || ""; headless = p.source === "exec" || p.originator === "codex_exec"; }
     if (j.type === "turn_context" && p.cwd) cwd ||= p.cwd;
-    if (!first && j.type === "event_msg") first = codexUser(p);
+    if (j.type === "event_msg") { const t = codexUser(p); if (t) { asked++; first ||= t; } }
   }
+  if (headless && asked <= 1) return null;
   if (!cwd || !sessionId || !first) return null;
   return { cwd, sessionId, title: first.split("\n")[0].slice(0, 80) };
 }
