@@ -7,7 +7,7 @@
     "start": "bun server.ts",
     "dev": "bun --watch server.ts",
     "app": "scripts/build-app.sh",
-    "app:install": "scripts/build-app.sh --install",
+    "app:install": "bun test && scripts/build-app.sh --install",
     "app:zip": "scripts/build-app.sh --zip",
     "test": "bun test"
   },
