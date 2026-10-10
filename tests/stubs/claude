@@ -8,6 +8,7 @@ if (a.includes("--model")) { console.log("Título de teste"); process.exit(0); }
 const lines = console[Symbol.asyncIterator]();
 const first = JSON.parse((await lines.next()).value);
 const blocks: any[] = first.message.content;
+const said = blocks.filter((b) => b.type === "text").map((b) => b.text).join("\n");
 const now = Math.floor(Date.now() / 1000);
 out({ type: "system", subtype: "init", session_id: "s-claude" });
 out({ type: "rate_limit_event", rate_limit_info: { unifiedWindows: { five_hour: { utilization: 0.42, resetsAt: now + 3600 }, seven_day: { utilization: 0.1, resetsAt: now + 86400 } } } });
@@ -22,7 +23,7 @@ if (a.includes("--permission-prompt-tool")) {
 } else {
   out({ type: "stream_event", event: { type: "message_start", message: { id: "m1" } } });
   for (const t of ["olá ", "mundo"]) out({ type: "stream_event", event: { type: "content_block_delta", index: 0, delta: { type: "text_delta", text: t } } });
-  out({ type: "assistant", message: { id: "m1", content: [{ type: "text", text: `olá mundo; imagens=${blocks.filter((b) => b.type === "image").length}; retomada=${a.includes("--resume")}` }] } });
+  out({ type: "assistant", message: { id: "m1", content: [{ type: "text", text: `olá mundo; imagens=${blocks.filter((b) => b.type === "image").length}; retomada=${a.includes("--resume")}; revisor=${said.includes("<diff>") && said.includes("novo.txt")}; leitura=${!a.includes("--permission-mode") && !a.includes("--dangerously-skip-permissions")}` }] } });
 }
-out({ type: "result", subtype: "success", is_error: false, session_id: "s-claude" });
+out({ type: "result", subtype: "success", is_error: false, session_id: "s-claude", total_cost_usd: 0.05, usage: { input_tokens: 100, cache_creation_input_tokens: 20, cache_read_input_tokens: 3000, output_tokens: 40 } });
 process.exit(0);

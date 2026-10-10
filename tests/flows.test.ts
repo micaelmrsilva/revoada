@@ -299,3 +299,112 @@ describe("conversas dos outros programas", () => {
     expect(texts(await idle(c.id))).toContain("retomada=true");
   }, SLOW);
 });
+
+describe("revisão cruzada e tokens", () => {
+  let id = "", reserva = "";
+
+  test("outra conta, de outro provedor, revisa o diff sem tocar na sessão do autor", async () => {
+    reserva = (await get("state")).accounts.find((a: any) => a.label === "reserva").id;
+    id = await chat(reserva, "CRIA-ARQUIVO", { cwd: join(GIT, "app"), isolate: true });
+    const before = await idle(id);
+    expect((await post(`convos/${id}/review`)).reviewer).toBe("claude-padrao");
+    const c = await idle(id);
+    const rev = c.messages.at(-1);
+    expect(rev.review).toBe(true);
+    expect(rev.state).toBe("done");
+    expect(rev.accountId).toBe("claude-padrao");
+    // o revisor recebeu o arquivo novo (ainda fora do git) e rodou sem permissão de edição
+    expect(texts(c)).toContain("revisor=true");
+    expect(texts(c)).toContain("leitura=true");
+    // o autor continua dono da conversa: mesma conta, mesma sessão nativa
+    expect(c.accountId).toBe(reserva);
+    expect(c.native).toEqual(before.native);
+    await post(`convos/${id}/send`, { text: "corrija" });
+    expect(texts(await idle(id))).toContain("retomei");
+  }, SLOW);
+
+  test("sem repositório ou sem mudança não há revisão", async () => {
+    const solto = await chat(reserva, "oi");
+    await idle(solto);
+    const r = await api(`convos/${solto}/review`, "POST", {});
+    expect(r.status).toBe(400);
+    expect(r.body.error).toContain("repositório git");
+  }, SLOW);
+
+  test("cada resposta guarda os tokens que o CLI informou", async () => {
+    const c = await get(`convos/${id}`);
+    expect(c.messages[1].tokens).toEqual({ in: 200, out: 30, cache: 1000 });
+    expect(c.messages.find((m: any) => m.review).tokens).toEqual({ in: 120, out: 40, cache: 3000, usd: 0.05 });
+  });
+
+  test("revisão automática só dispara quando a resposta mexeu em arquivo", async () => {
+    await post("settings", { autoReview: true });
+    const quieto = await chat(reserva, "só conversa", { cwd: join(GIT, "app") });
+    expect((await idle(quieto)).messages.length).toBe(2);
+    const mexeu = await chat(reserva, "CRIA-ARQUIVO", { cwd: join(GIT, "app"), isolate: true });
+    const c = await until(async () => { const x = await get(`convos/${mexeu}`); return x.messages.length === 3 && !x.working && x; });
+    expect(c.messages[2].review).toBe(true);
+    expect(c.messages[2].accountId).toBe("claude-padrao");
+    await post("settings", { autoReview: false });
+    await Bun.sleep(300);
+    expect((await get(`convos/${quieto}`)).messages.length).toBe(2);
+  }, SLOW);
+});
+
+describe("acompanhar pelo celular", () => {
+  const REMOTE = `http://127.0.0.1:${PORT + 1}`;
+  const token = () => JSON.parse(readFileSync(join(HOME, ".revoada/remote.json"), "utf8")).token as string;
+  const r = async (path: string, method = "GET", body?: unknown, tok = token()) => {
+    const res = await fetch(`${REMOTE}/r/${path}`, { method, headers: { authorization: `Bearer ${tok}`, ...(body ? { "content-type": "application/json" } : {}) }, body: body ? JSON.stringify(body) : undefined });
+    return { status: res.status, body: await res.json().catch(() => ({})) as any };
+  };
+
+  test("nasce desligado: nada escuta fora do painel", async () => {
+    expect((await get("state")).remote.on).toBe(false);
+    expect(await fetch(`${REMOTE}/`).then(() => "aberto").catch(() => "fechado")).toBe("fechado");
+  });
+
+  test("ligado, só entra com o código e só enxerga a API pequena", async () => {
+    expect((await post("remote", { on: true })).on).toBe(true);
+    expect((await fetch(`${REMOTE}/`)).status).toBe(200);
+    expect((await r("state", "GET", undefined, "errado")).status).toBe(401);
+    expect((await fetch(`${REMOTE}/r/state`)).status).toBe(401);
+    const s = await r("state");
+    expect(s.status).toBe(200);
+    expect(s.body.convos.length).toBeGreaterThan(0);
+    expect(JSON.stringify(s.body)).not.toContain(HOME); // caminho da máquina não sai
+    // o que o painel faz não existe nesta porta
+    for (const path of ["/api/state", "/api/accounts", "/api/settings", "/ws", "/r/accounts", "/r/settings"]) {
+      expect((await fetch(`${REMOTE}${path}`, { method: "POST", headers: { authorization: `Bearer ${token()}` }, body: "{}" })).status).toBe(404);
+    }
+  }, SLOW);
+
+  test("permite pelo celular; mandar mensagem só com a chave ligada", async () => {
+    const dir = join(HOME, "perm-celular"); mkdirSync(dir);
+    const id = await chat("claude-padrao", "crie o arquivo", { mode: "ask", cwd: dir });
+    const waiting = await until(async () => { const c = (await r(`convos/${id}`)).body; return c.waiting && c; });
+    const ask = waiting.messages.at(-1).items.find((i: any) => i.kind === "ask");
+    expect((await r(`convos/${id}/decide`, "POST", { req: ask.req, decision: "allow" })).status).toBe(200);
+    await idle(id);
+    expect(existsSync(join(dir, "feito.txt"))).toBe(true);
+    expect((await r(`convos/${id}/send`, "POST", { text: "mais uma" })).status).toBe(403);
+    expect((await post("remote", { send: true })).send).toBe(true);
+    expect((await r(`convos/${id}/send`, "POST", { text: "mais uma" })).status).toBe(200);
+    // o pedido novo também para esperando: parar pelo celular encerra
+    await until(async () => (await r(`convos/${id}`)).body.waiting);
+    expect((await r(`convos/${id}/stop`, "POST", {})).status).toBe(200);
+    expect((await idle(id)).messages.at(-1).state).toBe("stopped");
+  }, SLOW);
+
+  test("trocar o código derruba quem tinha o antigo; errar demais bloqueia; desligar fecha a porta", async () => {
+    const old = token();
+    await post("remote", { rotate: true });
+    expect(token()).not.toBe(old);
+    expect((await r("state", "GET", undefined, old)).status).toBe(401);
+    expect((await r("state")).status).toBe(200);
+    for (let i = 0; i < 8; i++) await r("state", "GET", undefined, "chute");
+    expect((await r("state")).status).toBe(429);
+    expect((await post("remote", { on: false })).on).toBe(false);
+    expect(await fetch(`${REMOTE}/`).then(() => "aberto").catch(() => "fechado")).toBe("fechado");
+  }, SLOW);
+});

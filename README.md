@@ -10,7 +10,9 @@ Um app para macOS que junta as suas contas de agentes de código (Claude Code, C
 - **Conversa de verdade.** Mensagens, texto formatado, comandos com a saída, arquivos editados e o diff do que mudou, em vez da tela crua do terminal. O terminal de cada agente continua disponível.
 - **Rodízio que leva a conversa.** Quando uma conta bate no limite, o pedido continua na próxima, com o histórico do que foi dito e feito. Vale também para trocar de agente à mão, até entre provedores.
 - **Permissão por ação.** No modo "Pergunta antes", o agente para e mostra o comando ou o arquivo antes de agir. Você permite, permite sempre naquela conversa, ou nega.
-- **Consumo à vista.** Quanto cada conta já usou das janelas do provedor, e o rodízio começa pela mais folgada.
+- **Consumo à vista.** Quanto cada conta já usou das janelas do provedor, e o rodízio começa pela mais folgada. Cada resposta mostra os tokens que gastou.
+- **Revisão cruzada.** Uma conta de outro provedor lê o que o agente mudou, sem poder editar, e aponta defeitos na própria conversa. Um botão manda os achados de volta para o autor corrigir. Pode rodar sozinha a cada resposta que mexe em arquivo.
+- **Acompanhar pelo celular.** Uma página leve, em outro aparelho da sua rede, para ver o que está rodando, permitir ou negar um pedido e parar um agente. Desligada por padrão.
 - **Cérebro compartilhado.** Um cofre do [Obsidian](https://obsidian.md) que espelha a memória de cada agente e entrega as notas relevantes como contexto de cada pedido, para qualquer conta. Temas sensíveis (finanças, infraestrutura) ficam de fora.
 - **Cópia isolada por tarefa.** Cada tarefa paralela pode rodar num `git worktree` próprio, que some sozinho quando o trabalho vira PR. Também acha e limpa os clones que os agentes deixam para trás.
 - **Conversas dos outros programas.** O que o Claude Code e o Codex já guardaram na máquina aparece na lateral e continua na sessão original.
@@ -53,12 +55,15 @@ A Revoada é um servidor local em Bun com uma página, embrulhado numa janela na
 | `brain.ts` | Cérebro: espelho da memória dos agentes num cofre, regras de bloqueio e busca. |
 | `clones.ts` | Cópias de repositório: detecção, classificação e limpeza. |
 | `history.ts` | Leitura do histórico do Claude Code e do Codex. |
-| `public/` | A página principal (`index.html`) e o painel da barra de menus (`mini.html`). |
+| `remote.ts` | Acompanhamento pelo celular: a segunda porta, o código de acesso e a API reduzida. |
+| `public/` | A página principal (`index.html`), o painel da barra de menus (`mini.html`) e a página do celular (`remoto.html`). |
 | `desktop/` | A janela nativa em Swift: sobe o servidor, barra de menus, avisos e vigília. |
 
 **Contas isoladas.** Cada conta extra é um diretório em `~/.revoada/profiles/<id>`, passado ao CLI pela variável que ele já entende (`CLAUDE_CONFIG_DIR`, `CODEX_HOME`, `GEMINI_CLI_HOME`, `GROK_HOME`). A conta "padrão desta máquina" é a que o CLI usa fora do app.
 
 **Conversa e rodízio.** Enquanto a conta é a mesma, cada resposta retoma a sessão nativa do agente. Quando a conta muda, a próxima recebe um resumo do que foi dito e feito na frente do pedido. O limite é detectado pela mensagem de erro do próprio CLI.
+
+**Revisão cruzada.** O revisor recebe o pedido do usuário e o diff (numa cópia isolada, tudo desde que ela se separou da principal; arquivo novo fora do git entra inteiro) e roda em modo só leitura, numa sessão própria. A conta e a sessão nativa do autor não mudam. A escolha é outro provedor primeiro, porque outro modelo erra em lugares diferentes; sem outro pronto, outra conta do mesmo.
 
 **Cérebro.** `Agentes/` e `Projetos/` no cofre são espelho (a origem manda, a sincronização sobrescreve). `Revoada/` são notas próprias, onde você ou qualquer agente pode escrever. A busca é local, por palavra (BM25); com um modelo de embeddings no Ollama passa a considerar também o significado.
 
@@ -67,6 +72,7 @@ A Revoada é um servidor local em Bun com uma página, embrulhado numa janela na
 A Revoada executa agentes que rodam comandos na sua máquina. Por isso:
 
 - O servidor só escuta em `127.0.0.1` e recusa qualquer chamada cuja origem não seja a própria página.
+- O acompanhamento pelo celular é a única coisa que escuta na rede, e só quando você liga. É outra porta (a do painel mais um), com uma API própria e pequena: ver conversas e limites, permitir ou negar, parar e, com uma segunda chave, escrever numa conversa que já existe. Criar conta, abrir terminal, mudar ajuste e ler o cérebro não existem ali. O acesso é por um código aleatório que vai no QR; errar oito vezes bloqueia o aparelho por dez minutos, e trocar o código derruba todos os pareados. **A conexão não é cifrada**: use na rede de casa ou pelo Tailscale, nunca em Wi-Fi público. Com a chave de escrever ligada, quem tiver o código manda pedidos aos seus agentes.
 - Nenhum token ou credencial passa pelo app: a autenticação é toda dos CLIs.
 - No modo "Pergunta antes" o agente não age sem sua resposta. Hoje só o Claude oferece isso; os outros caem para "Pode editar", com aviso na conversa.
 - Notas de tema bloqueado não são copiadas para o cofre nem enviadas como contexto. O bloqueio vale para o que a Revoada envia; um agente com acesso a arquivos ainda pode ler a pasta de memória de outro.
@@ -82,7 +88,7 @@ Nada sai da máquina além do que cada CLI já envia ao próprio provedor.
 | `~/revoada-cerebro/` | O cofre do cérebro. |
 | `~/.revoada/worktrees/` | Cópias isoladas criadas para tarefas. |
 
-Variáveis de ambiente: `REVOADA_HOME` (dados), `REVOADA_VAULT` (cofre), `REVOADA_PROJECTS` (pasta dos seus repositórios, padrão `~/git`) e `PORT`.
+Variáveis de ambiente: `REVOADA_HOME` (dados), `REVOADA_VAULT` (cofre), `REVOADA_PROJECTS` (pasta dos seus repositórios, padrão `~/git`), `PORT` e `REVOADA_REMOTE_PORT` (porta do celular, padrão `PORT` + 1).
 
 ## Mac acordado com a tampa fechada
 
@@ -102,7 +108,7 @@ O Mac volta a dormir quando ninguém trabalha, com bateria abaixo de 15% ou em t
 bun test
 ```
 
-`tests/flows.test.ts` sobe o servidor de verdade numa pasta de usuário descartável, com CLIs de mentira no `PATH` (`tests/stubs/`) que falam os mesmos protocolos dos reais. Cobre contas, conversa, rodízio, permissão, consumo, anexos, cérebro, cópias e importação. Não toca na sua pasta de usuário nem gasta conta.
+`tests/flows.test.ts` sobe o servidor de verdade numa pasta de usuário descartável, com CLIs de mentira no `PATH` (`tests/stubs/`) que falam os mesmos protocolos dos reais. Cobre contas, conversa, rodízio, permissão, consumo, anexos, cérebro, cópias, importação, revisão cruzada e o acesso pelo celular (código, bloqueio e o que a porta não expõe). Não toca na sua pasta de usuário nem gasta conta.
 
 O que os testes não cobrem: a interface, a janela nativa e os CLIs reais. Se um provedor mudar o formato de saída, os testes continuam passando.
 
@@ -120,12 +126,15 @@ Sem `SIGN_ID`, o zip abre em outro Mac por clique direito > Abrir.
 - Interface só em português.
 - Aprovação por ação e texto ao vivo funcionam só com o Claude.
 - O Grok não tem modo estruturado conhecido: a resposta chega como texto único.
+- O celular não recebe aviso com a página fechada: notificação de navegador exige HTTPS, e a porta é HTTP.
 - Reinstalar o app encerra as sessões de terminal abertas.
 
 ## Créditos
 
 - Terminal embutido: [xterm.js](https://xtermjs.org) (MIT).
 - A vigília foi inspirada no [Insomnia](https://github.com/krishhgg/Insomnia) (MIT), sem usar código dele.
+- A revisão cruzada, o acompanhamento pelo celular e os tokens por resposta vieram de ideias do [open-code-review](https://github.com/alibaba/open-code-review), do [coucou](https://github.com/Louis-CFM/coucou) e do [cost-xray](https://github.com/tigerless-labs/cost-xray), sem usar código deles.
+- QR do pareamento: [qrcode-generator](https://github.com/kazuhikoarase/qrcode-generator) (MIT).
 - Tipografia: Geist (SIL Open Font License), carregada do Google Fonts.
 
 Revoada não é afiliada à Anthropic, OpenAI, Google ou xAI. Os nomes dos produtos pertencem aos respectivos donos.
