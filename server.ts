@@ -182,7 +182,9 @@ const stripAnsi = (s: string) => s
 // ---------- limite e rodízio ----------
 type Limit = { until: number; reason: string; at: number };
 let limits: Record<string, Limit> = readJson(LIMITS_FILE) || {};
-const settings: { rotate: boolean; teach: boolean; onboarded: boolean; autoClean: boolean; importChats: boolean } = { rotate: true, teach: false, onboarded: false, autoClean: false, importChats: false, ...(readJson(SETTINGS_FILE) || {}) };
+const settings: { rotate: boolean; teach: boolean; onboarded: boolean; autoClean: boolean; importChats: boolean; keepAwake: boolean; lidAwake: boolean; lidFreeze: boolean } = { rotate: true, teach: false, onboarded: false, autoClean: false, importChats: false, keepAwake: true, lidAwake: false, lidFreeze: false, ...(readJson(SETTINGS_FILE) || {}) };
+// o que a janela nativa informa sobre a vigília (só existe no app desktop)
+let vigil: Record<string, unknown> | null = null;
 // consumo de cada conta nas janelas do provedor (5h, 7 dias), lido do que o próprio CLI informa
 const usage: Record<string, Usage[]> = readJson(join(ROOT, "usage.json")) || {};
 const liveUsage = (id: string) => (usage[id] || []).filter((u) => u.resetsAt > Date.now());
@@ -656,7 +658,7 @@ async function state(refresh: boolean) {
     sessions: [...sessions.values()].map((s) => ({ ...sessionMeta(s), alive: s.alive, busy: s.alive && Date.now() - s.lastOut < BUSY_MS })),
     runs: runs.map((r) => ({ id: r.id, title: r.prompt, cwd: r.cwd, at: r.at, running: r.jobs.some((j) => j.state === "rodando"), jobs: r.jobs.length })),
     brain: brain.info(),
-    clones: clones.summary(), cleaned,
+    clones: clones.summary(), cleaned, vigil,
     convos: convos.list(),
     history: settings.importChats ? history.list() : [],
   };
@@ -802,6 +804,8 @@ const server = Bun.serve({
       return json(brain.info());
     }
 
+    if (resource === "vigil" && req.method === "POST") { vigil = body; return json({ ok: true }); }
+
     if (resource === "rename" && req.method === "POST") {
       const title = String(body.title || "").trim().slice(0, 80);
       if (!title) return fail("o título não pode ficar vazio");
@@ -844,6 +848,7 @@ const server = Bun.serve({
       if (typeof body.rotate === "boolean") settings.rotate = body.rotate;
       if (typeof body.onboarded === "boolean") settings.onboarded = body.onboarded;
       if (typeof body.importChats === "boolean") settings.importChats = body.importChats;
+      for (const k of ["keepAwake", "lidAwake", "lidFreeze"] as const) if (typeof body[k] === "boolean") settings[k] = body[k];
       if (typeof body.autoClean === "boolean") { settings.autoClean = body.autoClean; if (body.autoClean) setTimeout(autoClean, 500); }
       if (typeof body.teach === "boolean") { settings.teach = body.teach; teachAll(body.teach); }
       writeFileSync(SETTINGS_FILE, JSON.stringify(settings));

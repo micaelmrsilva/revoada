@@ -15,7 +15,7 @@ ICONSET=$(mktemp -d)/AppIcon.iconset
 swift scripts/render-icon.swift public/icon.svg "$ICONSET"
 iconutil -c icns "$ICONSET" -o "$RES/AppIcon.icns"
 
-swiftc -O -swift-version 5 desktop/main.swift desktop/status.swift -o "$APP/Contents/MacOS/Revoada" -framework AppKit -framework WebKit
+swiftc -O -swift-version 5 desktop/main.swift desktop/status.swift desktop/vigil.swift -o "$APP/Contents/MacOS/Revoada" -framework AppKit -framework WebKit
 cp desktop/Info.plist "$APP/Contents/Info.plist"
 # Assinatura. Sem SIGN_ID fica ad hoc (roda só nesta máquina sem aviso).
 # Para distribuir: SIGN_ID="Developer ID Application: Nome (TEAMID)" e, pra notarizar,

@@ -80,3 +80,12 @@ App: ⌃⌥Espaço abre o pedido rápido; "Abrir ao iniciar o Mac" no menu Revoa
 - Título automático pelo Claude Haiku depois da primeira resposta.
 - `history.ts`: lista as sessões que o Claude Code e o Codex já guardaram e abre cada uma como conversa,
   ligada à sessão original (continuar retoma o mesmo id).
+
+## Vigília (Mac acordado enquanto os agentes trabalham)
+`desktop/vigil.swift`. Com a tampa aberta, uma assertion do sistema segura o Mac acordado enquanto há
+agente trabalhando e por 90s depois (sem senha). Com a tampa fechada é preciso desligar o sono do sistema,
+o que exige administrador: `scripts/vigilia-setup.sh` instala uma regra de sudo restrita a
+`pmset -a disablesleep 0|1` e um vigia (LaunchAgent) que religa o sono se o app morrer ou passar de 6h.
+Travas: volta a dormir com bateria abaixo de 15%, com o Mac em temperatura crítica, ou quando ninguém
+trabalha. O que é mudado fica anotado em `~/.revoada/vigil.json` antes de mudar. Inspirado no Insomnia
+(github.com/krishhgg/Insomnia, MIT), sem código dele.

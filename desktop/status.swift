@@ -60,6 +60,7 @@ final class StatusController: NSObject, UNUserNotificationCenterDelegate, WKScri
   var mini: WKWebView!
   var monitors: [Any] = []
   var flap: Timer?
+  lazy var vigil = Vigil(app: app)
   var phase = 0.0
 
   init(app: AppDelegate) {
@@ -252,6 +253,9 @@ final class StatusController: NSObject, UNUserNotificationCenterDelegate, WKScri
     item.button?.toolTip = summary()
     NSApp.dockTile.badgeLabel = working > 0 ? "\(working)" : nil
     animate(working > 0)
+    // parado esperando permissão não é trabalho: não vale manter o Mac acordado por isso
+    let waitingNow = chats.filter { $0["waiting"] as? Bool == true }.count
+    vigil.tick(settings: state["settings"] as? [String: Any] ?? [:], working: working - waitingNow)
     let line = summary() + (lim.isEmpty ? "" : " · \(lim.count) no limite")
     if line != lastLine { lastLine = line; app.log("barra: \(line)") }
 

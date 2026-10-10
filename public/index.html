@@ -70,7 +70,7 @@
   aside { position: relative; z-index: 6; }
   .foot { padding: 8px; border-top: 1px solid var(--line); }
   .foot .item { color: var(--mute); padding: 6px 10px; } .foot .item:hover, .foot .item.on { color: var(--text); }
-  #popSettings { left: calc(100% + 8px); bottom: 10px; width: 340px; padding: 6px; }
+  #popSettings { left: calc(100% + 8px); bottom: 10px; width: 360px; padding: 6px; max-height: calc(100vh - 40px); }
   .item.primary { border: 1px solid var(--line); background: var(--bg); font-weight: 500; margin-bottom: 6px; }
   .item.primary:hover { border-color: var(--faint); background: var(--bg); }
   kbd { font: 11px "Geist Mono", ui-monospace, monospace; color: var(--faint); }
@@ -453,6 +453,10 @@ function paintSettings() {
     + row("teach", S.settings.teach, "Agentes salvam no cérebro", "Cada agente aprende, pelas instruções globais dele, a guardar no cofre o que for durável.")
     + row("importChats", S.settings.importChats, "Conversas dos outros programas", "Mostra na lateral o que o Claude Code e o Codex já guardaram nesta máquina, para continuar daqui.")
     + row("autoClean", S.settings.autoClean, "Limpeza de clones", "Cópias de repositório que já viraram PR e não têm nada pendente vão sozinhas para a Lixeira.")
+    + (S.vigil ? `<span class="label" style="padding-top:14px">Mac acordado</span>`
+      + row("keepAwake", S.settings.keepAwake, "Enquanto os agentes trabalham", S.vigil.holding ? "Agora: segurando o Mac acordado. Ele volta a dormir sozinho cerca de um minuto depois que terminam." : "O Mac não dorme por inatividade enquanto houver agente trabalhando.")
+      + row("lidAwake", S.settings.lidAwake, "Continuar com a tampa fechada", S.vigil.canLid ? (S.vigil.note || (S.vigil.sleepDisabled ? "Agora: sono do sistema desligado. Volta ao normal quando os agentes terminam, com bateria abaixo de 15% ou depois de 6 horas." : "Só enquanto houver agente trabalhando. Use em superfície ventilada, nunca dentro de mochila.")) : "Falta a permissão de administrador. Rode no Terminal: ~/git/revoada/scripts/vigilia-setup.sh")
+      + row("lidFreeze", S.settings.lidFreeze, "Pausar apps com a tampa fechada", `Slack, WhatsApp e Discord param enquanto a tampa está fechada e voltam ao abrir.${S.vigil.frozen ? ` Agora: ${S.vigil.frozen} pausados.` : ""}`) : "")
     + `<div class="set"><b>Aparência</b><span class="seg">${[["light", "Claro"], ["dark", "Escuro"], ["system", "Sistema"]].map(([k, n]) => `<button class="${t === k ? "on" : ""}" data-theme="${k}">${n}</button>`).join("")}</span><small>Os terminais ficam sempre escuros.</small></div>`;
 }
 $("settingsBtn").onclick = (e) => { e.stopPropagation(); paintSettings(); togglePop("popSettings"); };

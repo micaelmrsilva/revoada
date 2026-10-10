@@ -189,6 +189,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKUIDelegate, WKNaviga
   }
 
   func applicationWillTerminate(_ note: Notification) {
+    status?.vigil.shutdown()
     guard let p = server, p.isRunning else { return }
     p.terminate()
     // dá tempo do servidor gravar as conversas abertas no histórico
