@@ -63,9 +63,10 @@ beforeAll(async () => {
   // repositório principal com origem, mais duas cópias: uma limpa e uma com trabalho local
   mkdirSync(GIT, { recursive: true });
   const origin = join(HOME, "origem.git");
-  sh(HOME, "git", "init", "-q", "--bare", origin);
+  // branch padrão explícito: em máquina nova o git ainda cria "master"
+  sh(HOME, "git", "init", "-q", "--bare", "-b", "main", origin);
   const main = join(GIT, "app");
-  sh(GIT, "git", "init", "-q", main);
+  sh(GIT, "git", "init", "-q", "-b", "main", main);
   writeFileSync(join(main, "README.md"), "# app\n");
   git(main, "add", "."); git(main, "commit", "-qm", "inicial"); git(main, "branch", "-M", "main");
   git(main, "remote", "add", "origin", origin); git(main, "push", "-q", "-u", "origin", "main");
