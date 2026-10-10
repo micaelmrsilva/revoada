@@ -8,6 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/vendor/xterm.css">
+<script src="/md.js"></script>
 <script>
   // tema antes da primeira pintura
   (() => { let t; try { t = localStorage.getItem("theme"); } catch {} document.documentElement.dataset.theme = t || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"); })();
@@ -168,13 +169,29 @@
   .m.bot { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; min-width: 0; }
   .who { font-size: 12.5px; color: var(--mute); display: flex; gap: 10px; align-items: center; }
   .who b { color: var(--text); font-weight: 600; } .who .b { color: var(--teal); }
-  .md { line-height: 1.62; font-size: 14.5px; min-width: 0; overflow-wrap: anywhere; }
+  .md { line-height: 1.6; font-size: 15px; min-width: 0; overflow-wrap: anywhere; }
   .md > :first-child { margin-top: 0; } .md > :last-child { margin-bottom: 0; }
-  .md p { margin: 0 0 10px; } .md ul, .md ol { margin: 0 0 10px; padding-left: 22px; } .md li { margin: 3px 0; }
-  .md h3 { font-size: 15.5px; margin: 16px 0 6px; font-weight: 600; } .md a { color: var(--teal); }
+  .md p { margin: 0 0 12px; } .md ul, .md ol { margin: 0 0 14px; padding-left: 26px; } .md li { margin: 6px 0; padding-left: 4px; } .md li::marker { color: var(--mute); }
+  .md h2 { font-size: 18px; margin: 20px 0 8px; font-weight: 600; letter-spacing: -.01em; } .md h3 { font-size: 15.5px; margin: 16px 0 6px; font-weight: 600; } .md h4 { font-size: 14.5px; margin: 14px 0 4px; font-weight: 600; }
+  .md a { color: var(--teal); } .md s { color: var(--mute); } .md hr { border: 0; border-top: 1px solid var(--line); margin: 16px 0; }
+  .md li > ul, .md li > ol { margin: 3px 0 0; } .md li.task { list-style: none; margin-left: -20px; } .md li.task .tk { display: inline-block; width: 20px; color: var(--mute); }
+  .md blockquote { margin: 0 0 10px; padding: 2px 0 2px 14px; border-left: 2px solid var(--line); color: var(--mute); }
+  .md .tbl { overflow-x: auto; margin: 4px 0 14px; border: 1px solid var(--line); border-radius: 10px; }
+  .md table { border-collapse: collapse; width: 100%; }
+  .md th, .md td { padding: 9px 14px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--line); overflow-wrap: break-word; }
+  .md th { font-weight: 500; background: var(--side); } .md tbody tr:last-child td { border-bottom: 0; }
+  .md pre { position: relative; } .md pre .lang { position: absolute; top: 7px; right: 10px; font: 10.5px "Geist Mono", ui-monospace, monospace; letter-spacing: .08em; text-transform: uppercase; color: var(--faint); }
   .md code { font: 12.5px "Geist Mono", ui-monospace, Menlo, monospace; background: var(--soft); padding: 1.5px 5px; border-radius: 5px; }
   .md pre { background: var(--term); color: #e4e9e8; border: 1px solid var(--term-line); border-radius: 12px; padding: 12px 14px; overflow-x: auto; margin: 0 0 10px; }
   .md pre code { background: none; padding: 0; color: inherit; }
+  /* o que o agente fez entre um texto e outro fica numa linha discreta; abre pra ver os detalhes */
+  .acts > summary { list-style: none; display: flex; align-items: center; gap: 8px; color: var(--mute); font-size: 14px; cursor: pointer; min-width: 0; }
+  .acts > summary::-webkit-details-marker { display: none; }
+  .acts > summary:hover { color: var(--text); }
+  .acts > summary .lbl { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .acts > summary::after { content: "›"; color: var(--faint); transition: transform .15s; flex: none; }
+  .acts[open] > summary::after { transform: rotate(90deg); }
+  .acts > .in { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; margin-top: 10px; }
   .act { border: 1px solid var(--line); border-radius: 12px; font-size: 13px; min-width: 0; }
   .act > summary, .act.flat { display: flex; align-items: center; gap: 10px; padding: 8px 12px; cursor: pointer; list-style: none; min-width: 0; }
   .act > summary::-webkit-details-marker { display: none; }
@@ -762,28 +779,7 @@ $("send").onclick = async () => {
 };
 
 // ---------- conversa estruturada ----------
-// markdown mínimo e seguro: tudo é escapado antes; só o que está aqui vira marcação
-function mdInline(t) {
-  return t.replace(/`([^`]+)`/g, "<code>$1</code>").replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>").replace(/(^|[\s(])\*([^*\s][^*]*)\*/g, "$1<i>$2</i>")
-    .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
-}
-function md(src) {
-  return String(src || "").split(/```/).map((part, i) => {
-    if (i % 2) return `<pre><code>${esc(part.replace(/^[\w+-]*\n/, "").replace(/\n$/, ""))}</code></pre>`;
-    let html = "", list = null;
-    const close = () => { if (list) { html += `</${list}>`; list = null; } };
-    for (const para of esc(part).split(/\n{2,}/)) {
-      for (const line of para.split("\n")) {
-        const h = line.match(/^#{1,4}\s+(.*)/), ul = line.match(/^\s*[-*]\s+(.*)/), ol = line.match(/^\s*\d+[.)]\s+(.*)/);
-        if (h) { close(); html += `<h3>${mdInline(h[1])}</h3>`; }
-        else if (ul || ol) { const tag = ul ? "ul" : "ol"; if (list !== tag) { close(); html += `<${tag}>`; list = tag; } html += `<li>${mdInline((ul || ol)[1])}</li>`; }
-        else if (line.trim()) { close(); html += `<p>${mdInline(line)}</p>`; }
-      }
-      close();
-    }
-    return html;
-  }).join("");
-}
+// o markdown das respostas vem de /md.js (o mesmo arquivo serve a página do celular)
 const openActs = new Set(); // blocos que o usuário abriu, pra não fecharem a cada atualização
 function itemHtml(it, key) {
   const open = openActs.has(key) ? "open" : "";
@@ -802,6 +798,27 @@ function itemHtml(it, key) {
   if (it.kind === "todo") return `<div class="act"><ul class="todo">${it.items.map((t) => `<li class="${t.done ? "done" : ""}">${t.done ? "✓" : "○"} ${esc(t.text)}</li>`).join("")}</ul></div>`;
   return "";
 }
+const QUIET = new Set(["think", "cmd", "tool", "files"]);
+const running = (it) => (it.kind === "cmd" ? it.exit == null && it.status !== "failed" : it.status === "in_progress");
+// uma linha que conta o que foi feito; enquanto algo roda, mostra o que é
+function groupLabel(g) {
+  const live = g.findLast((it) => running(it));
+  if (live) return live.kind === "cmd" ? `Rodando ${live.command.split("\n")[0]}` : live.kind === "files" ? `Editando ${live.changes.map((c) => base(c.path)).join(", ")}` : `${live.name} ${live.detail}`;
+  const n = { cmd: 0, files: 0, read: 0, search: 0, web: 0, tool: 0 };
+  for (const it of g) {
+    if (it.kind === "cmd") n.cmd++;
+    else if (it.kind === "files") n.files += it.changes.length;
+    else if (it.kind === "tool") n[/^(Read|NotebookRead)$/.test(it.name) ? "read" : /^(Grep|Glob|LS)$/.test(it.name) ? "search" : /web|WebSearch|WebFetch/i.test(it.name) ? "web" : "tool"]++;
+  }
+  const said = [n.cmd && `rodou ${plural(n.cmd, "comando", "comandos")}`, n.files && `editou ${plural(n.files, "arquivo", "arquivos")}`, n.read && `leu ${plural(n.read, "arquivo", "arquivos")}`,
+    n.search && `buscou ${plural(n.search, "vez", "vezes")} no projeto`, n.web && `consultou a web ${plural(n.web, "vez", "vezes")}`, n.tool && `usou ${plural(n.tool, "ferramenta", "ferramentas")}`].filter(Boolean);
+  const failed = g.filter((it) => (it.kind === "cmd" && it.exit) || it.status === "failed").length;
+  const text = said.length ? said.join(", ") : "pensou";
+  return text[0].toUpperCase() + text.slice(1) + (failed ? ` · ${plural(failed, "falhou", "falharam")}` : "");
+}
+function groupHtml(g, key, i) {
+  return `<details class="acts" data-key="${esc(key)}" ${openActs.has(key) ? "open" : ""}><summary><span class="lbl">${esc(groupLabel(g))}</span></summary><div class="in">${g.map((it) => itemHtml(it, `${i}:${it.k}`)).join("")}</div></details>`;
+}
 // o que a pessoa colou vem com buracos; o aviso de interrupção do CLI não é fala dela
 const tidy = (t) => String(t || "").replace(/\n{3,}/g, "\n\n").trim();
 const INTERRUPTED = /^\[Request interrupted by user[^\]]*\]$/;
@@ -817,14 +834,20 @@ function msgParts(m, i) {
   // o cartão de permissão já mostra o comando: a linha dele some enquanto espera, e depois de permitido fica só a linha
   const same = (ask, it) => (it.kind === "cmd" && it.command === ask.detail) || (it.kind === "files" && it.changes.some((c) => c.path === ask.detail));
   const pending = items.filter((x) => x.kind === "ask" && x.state === "pending");
-  const parts = [["who", `<div class="who">${m.review ? `<span class="tag ok">Revisão</span>` : ""}<b>${esc(accName(acc(m.accountId)))}</b>${m.state === "working" ? "" : `<span class="num">${took}s</span>`}${m.tokens ? `<span class="num" title="${esc(tokTitle(m.tokens))}">${tok(m.tokens.in + m.tokens.out + m.tokens.cache)} tokens</span>` : ""}${m.brain?.length ? `<span class="b" title="${esc(m.brain.join("\n"))}">${plural(m.brain.length, "nota", "notas")} do cérebro</span>` : ""}${m.state === "stopped" ? "<span>interrompido</span>" : ""}</div>`]];
+  const parts = [["who", `<div class="who">${m.review ? `<span class="tag ok">Revisão</span>` : ""}<b>${esc(accName(acc(m.accountId)))}</b>${m.state === "working" ? "" : `<span class="num">${dur(took)}</span>`}${m.tokens ? `<span class="num" title="${esc(tokTitle(m.tokens))}">${tok(m.tokens.in + m.tokens.out + m.tokens.cache)} tokens</span>` : ""}${m.brain?.length ? `<span class="b" title="${esc(m.brain.join("\n"))}">${plural(m.brain.length, "nota", "notas")} do cérebro</span>` : ""}${m.state === "stopped" ? "<span>interrompido</span>" : ""}</div>`]];
+  // raciocínio, comandos, arquivos e ferramentas seguidos viram um grupo só
+  let group = [];
+  const flush = () => { if (group.length) parts.push([`g:${group[0].k}`, groupHtml(group, `${i}:g:${group[0].k}`, i)]); group = []; };
   for (const it of items) {
     if (it.kind === "think" && !it.text.trim()) continue;
     if (pending.some((a) => same(a, it))) continue;
     if (it.kind === "ask" && it.state === "allowed" && items.some((x) => same(it, x))) continue;
+    if (QUIET.has(it.kind)) { group.push(it); continue; }
+    flush();
     const h = itemHtml(it, `${i}:${it.k}`);
     if (h) parts.push([it.k, h]);
   }
+  flush();
   const tail = ""
     + (m.state === "working" ? (m.items?.some((i) => i.kind === "ask" && i.state === "pending") ? `<div class="working" style="color:var(--amber)"><i style="background:var(--amber)"></i>esperando você</div>` : `<div class="working"><i></i>trabalhando há <span class="num" data-since="${m.at}"></span></div>`) : "")
     + (m.error ? `<div class="sys red">${esc(m.error)}</div>` : "")
@@ -832,6 +855,7 @@ function msgParts(m, i) {
   if (tail) parts.push(["tail", tail]);
   return parts;
 }
+const dur = (s) => (s < 60 ? `${s}s` : s < 3600 ? `${Math.floor(s / 60)}m ${String(s % 60).padStart(2, "0")}s` : `${Math.floor(s / 3600)}h ${String(Math.floor((s % 3600) / 60)).padStart(2, "0")}m`);
 const tok = (n) => (n >= 1e6 ? `${(n / 1e6).toFixed(1).replace(".", ",")}M` : n >= 1000 ? `${(n / 1000).toFixed(n >= 1e5 ? 0 : 1).replace(".", ",")}k` : String(n));
 const tokTitle = (t) => `entrada ${tok(t.in)} · saída ${tok(t.out)} · relido do cache ${tok(t.cache)}${t.usd != null ? ` · US$ ${t.usd.toFixed(2).replace(".", ",")}` : ""}`;
 const reviewText = (m) => (m.items || []).filter((x) => x.kind === "text").map((x) => x.text).join("\n").trim();

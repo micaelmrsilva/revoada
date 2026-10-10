@@ -57,7 +57,18 @@
   .bubble { background: var(--soft); border-radius: 18px; padding: 10px 14px; max-width: 88%; white-space: pre-wrap; word-break: break-word; }
   .who { font-size: 13px; color: var(--mute); display: flex; gap: 10px; align-items: center; flex-wrap: wrap; } .who b { color: var(--text); font-weight: 600; }
   .tag { font: 11px ui-monospace, "SF Mono", Menlo, monospace; letter-spacing: .14em; text-transform: uppercase; color: var(--teal); }
-  .text { white-space: pre-wrap; word-break: break-word; }
+  .md { min-width: 0; overflow-wrap: anywhere; line-height: 1.5; }
+  .md > :first-child { margin-top: 0; } .md > :last-child { margin-bottom: 0; }
+  .md p { margin: 0 0 10px; } .md ul, .md ol { margin: 0 0 10px; padding-left: 22px; } .md li { margin: 4px 0; } .md li > ul, .md li > ol { margin: 4px 0 0; }
+  .md li.task { list-style: none; margin-left: -20px; } .md li.task .tk { display: inline-block; width: 20px; color: var(--mute); }
+  .md h2 { font-size: 19px; margin: 18px 0 8px; } .md h3 { font-size: 17px; margin: 16px 0 6px; } .md h4 { font-size: 16px; margin: 14px 0 4px; }
+  .md a { color: var(--teal); } .md s { color: var(--mute); } .md hr { border: 0; border-top: 1px solid var(--line); margin: 16px 0; }
+  .md code { font: 14px ui-monospace, "SF Mono", Menlo, monospace; background: var(--soft); padding: 1px 5px; border-radius: 5px; }
+  .md pre { position: relative; background: var(--soft); border-radius: 10px; padding: 12px; overflow-x: auto; margin: 0 0 10px; } .md pre code { background: none; padding: 0; font-size: 13px; } .md pre .lang { display: none; }
+  .md blockquote { margin: 0 0 10px; padding-left: 12px; border-left: 2px solid var(--line); color: var(--mute); }
+  .md .tbl { overflow-x: auto; margin: 0 0 12px; border: 1px solid var(--line); border-radius: 10px; }
+  .md table { border-collapse: collapse; width: 100%; font-size: 14px; } .md th, .md td { padding: 8px 10px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--line); }
+  .md th { font-weight: 600; white-space: nowrap; } .md tbody tr:last-child td { border-bottom: 0; }
   details.act { border: 1px solid var(--line); border-radius: 10px; font-size: 13px; }
   details.act summary { list-style: none; display: flex; gap: 8px; align-items: center; padding: 10px 12px; min-height: 44px; }
   details.act summary::-webkit-details-marker { display: none; }
@@ -85,6 +96,7 @@
 </style>
 </head>
 <body>
+<script src="/md.js"></script>
 <header id="head"></header>
 <main id="main"></main>
 <footer id="foot"></footer>
@@ -145,7 +157,7 @@ function paintList() {
 
 const openActs = new Set();
 function itemHtml(it, key) {
-  if (it.kind === "text") return `<div class="text">${esc(it.text)}</div>`;
+  if (it.kind === "text") return `<div class="md">${md(it.text)}</div>`;
   if (it.kind === "note") return `<div class="sys ${esc(it.tone)}">${esc(it.text)}</div>`;
   if (it.kind === "ask") {
     const what = { Bash: "rodar este comando", Edit: "editar este arquivo", Write: "criar este arquivo", MultiEdit: "editar este arquivo", WebFetch: "abrir este endereço", Read: "ler este arquivo" }[it.tool] || `usar ${it.tool}`;

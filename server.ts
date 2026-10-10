@@ -776,6 +776,7 @@ const server = Bun.serve({
     if (path === "/" || path === "/index.html") return new Response(Bun.file(join(PUBLIC, "index.html")));
     if (path === "/logo.svg" || path === "/icon.svg") return new Response(Bun.file(join(PUBLIC, path)));
     if (path === "/mini") return new Response(Bun.file(join(PUBLIC, "mini.html")));
+    if (path === "/md.js") return new Response(Bun.file(join(PUBLIC, "md.js")));
     // só em desenvolvimento: estado de mentira pra olhar o painel da barra com tudo aceso
     if (path === "/api/demo-state" && process.env.REVOADA_DEMO) return json(demoState(await state(false)));
     if (path.startsWith("/vendor/")) {

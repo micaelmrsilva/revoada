@@ -57,7 +57,7 @@ A Revoada é um servidor local em Bun com uma página, embrulhado numa janela na
 | `history.ts` | Leitura do histórico do Claude Code e do Codex. |
 | `safe.ts` | Decide se um comando só lê, para rodar sem perguntar no modo "Pergunta antes". |
 | `remote.ts` | Acompanhamento pelo celular: a segunda porta, o código de acesso e a API reduzida. |
-| `public/` | A página principal (`index.html`), o painel da barra de menus (`mini.html`) e a página do celular (`remoto.html`). |
+| `public/` | A página principal (`index.html`), o painel da barra de menus (`mini.html`) a página do celular (`remoto.html`) e o markdown das respostas (`md.js`). |
 | `desktop/` | A janela nativa em Swift: sobe o servidor, barra de menus, avisos e vigília. |
 
 **Contas isoladas.** Cada conta extra é um diretório em `~/.revoada/profiles/<id>`, passado ao CLI pela variável que ele já entende (`CLAUDE_CONFIG_DIR`, `CODEX_HOME`, `GEMINI_CLI_HOME`, `GROK_HOME`). A conta "padrão desta máquina" é a que o CLI usa fora do app.
@@ -109,7 +109,7 @@ O Mac volta a dormir quando ninguém trabalha, com bateria abaixo de 15% ou em t
 bun test
 ```
 
-`tests/flows.test.ts` sobe o servidor de verdade numa pasta de usuário descartável, com CLIs de mentira no `PATH` (`tests/stubs/`) que falam os mesmos protocolos dos reais. Cobre contas, conversa, rodízio, permissão, consumo, anexos, cérebro, cópias, importação, revisão cruzada e o acesso pelo celular (código, bloqueio e o que a porta não expõe). Não toca na sua pasta de usuário nem gasta conta.
+`tests/flows.test.ts` sobe o servidor de verdade numa pasta de usuário descartável, com CLIs de mentira no `PATH` (`tests/stubs/`) que falam os mesmos protocolos dos reais. Cobre contas, conversa, rodízio, permissão, consumo, anexos, cérebro, cópias, importação, revisão cruzada e o acesso pelo celular (código, bloqueio e o que a porta não expõe). `tests/safe.test.ts` cobre o que roda sem perguntar e `tests/md.test.ts` a formatação das respostas, incluindo texto que tenta virar marcação. Não toca na sua pasta de usuário nem gasta conta.
 
 O que os testes não cobrem: a interface, a janela nativa e os CLIs reais. Se um provedor mudar o formato de saída, os testes continuam passando.
 
