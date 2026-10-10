@@ -1,0 +1,28 @@
+#!/usr/bin/env bun
+// Claude de mentira para os testes: fala o protocolo de entrada/saída em JSON, inclusive
+// o pedido de permissão, o texto aos pedaços e o aviso de consumo.
+import { writeFileSync } from "fs";
+const a = process.argv.slice(2), out = (o: unknown) => console.log(JSON.stringify(o));
+if (a[0] === "auth") { out({ loggedIn: true, email: "teste@exemplo.dev", subscriptionType: "max", orgName: "teste@exemplo.dev" }); process.exit(0); }
+if (a.includes("--model")) { console.log("Título de teste"); process.exit(0); }
+const lines = console[Symbol.asyncIterator]();
+const first = JSON.parse((await lines.next()).value);
+const blocks: any[] = first.message.content;
+const now = Math.floor(Date.now() / 1000);
+out({ type: "system", subtype: "init", session_id: "s-claude" });
+out({ type: "rate_limit_event", rate_limit_info: { unifiedWindows: { five_hour: { utilization: 0.42, resetsAt: now + 3600 }, seven_day: { utilization: 0.1, resetsAt: now + 86400 } } } });
+if (a.includes("--permission-prompt-tool")) {
+  const input = { command: "touch feito.txt" };
+  out({ type: "assistant", message: { id: "m1", content: [{ type: "tool_use", id: "tu1", name: "Bash", input }] } });
+  out({ type: "control_request", request_id: "r1", request: { subtype: "can_use_tool", tool_name: "Bash", input } });
+  const answer = JSON.parse((await lines.next()).value).response.response;
+  if (answer.behavior === "allow") writeFileSync("feito.txt", "ok");
+  out({ type: "user", message: { content: [{ type: "tool_result", tool_use_id: "tu1", content: answer.behavior === "allow" ? "" : "negado", is_error: answer.behavior !== "allow" }] } });
+  out({ type: "assistant", message: { id: "m2", content: [{ type: "text", text: answer.behavior === "allow" ? "permitido" : "negado" }] } });
+} else {
+  out({ type: "stream_event", event: { type: "message_start", message: { id: "m1" } } });
+  for (const t of ["olá ", "mundo"]) out({ type: "stream_event", event: { type: "content_block_delta", index: 0, delta: { type: "text_delta", text: t } } });
+  out({ type: "assistant", message: { id: "m1", content: [{ type: "text", text: `olá mundo; imagens=${blocks.filter((b) => b.type === "image").length}; retomada=${a.includes("--resume")}` }] } });
+}
+out({ type: "result", subtype: "success", is_error: false, session_id: "s-claude" });
+process.exit(0);

@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Revoada</title>
+<style>
+  /* Painel da barra de menus: fundo transparente, o vidro fosco vem da janela nativa. */
+  :root { --text: #101816; --mute: rgba(16,24,22,.62); --faint: rgba(16,24,22,.38); --card: rgba(255,255,255,.46); --line: rgba(16,24,22,.10); --teal: #0b7f99; --red: #d63a3f; --amber: #b9720f; --ink: #0d1514; --on-ink: #fff; }
+  @media (prefers-color-scheme: dark) {
+    :root { --text: #f1f5f4; --mute: rgba(241,245,244,.62); --faint: rgba(241,245,244,.36); --card: rgba(255,255,255,.07); --line: rgba(255,255,255,.10); --teal: #5fd6e6; --red: #ff7a7d; --amber: #f0b560; --ink: #f1f5f4; --on-ink: #0b100f; }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: transparent; }
+  body { font: 13px/1.4 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif; color: var(--text); -webkit-user-select: none; user-select: none; cursor: default; -webkit-font-smoothing: antialiased; }
+  body.preview { background: linear-gradient(135deg, #2b6777, #c9a35a 55%, #7a3b52); min-height: 100vh; padding: 30px; }
+  body.preview #root { background: rgba(245,248,247,.72); backdrop-filter: blur(30px) saturate(1.6); -webkit-backdrop-filter: blur(30px) saturate(1.6); border-radius: 16px; box-shadow: 0 20px 60px rgba(0,0,0,.35); }
+  @media (prefers-color-scheme: dark) { body.preview #root { background: rgba(22,28,27,.70); } }
+  #root { width: 372px; padding: 14px 14px 12px; }
+  button, input { font: inherit; color: inherit; }
+  button { background: none; border: 0; padding: 0; cursor: default; }
+  .num { font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; }
+  .mono { font-family: ui-monospace, "SF Mono", Menlo, monospace; }
+
+  header { display: flex; align-items: center; gap: 9px; padding: 0 2px 12px; }
+  header .logo { width: 26px; line-height: 0; }
+  header b { font-size: 14px; font-weight: 650; letter-spacing: -.01em; }
+  header .sum { margin-left: auto; color: var(--mute); font-size: 12px; }
+  .logo.fly svg path { transform-box: fill-box; transform-origin: center; animation: flap .9s ease-in-out infinite; }
+  .logo.fly svg path:nth-child(2) { animation-delay: -.3s; } .logo.fly svg path:nth-child(3) { animation-delay: -.6s; }
+  @keyframes flap { 50% { transform: translateY(-9%) scaleY(.72); } }
+
+  h6 { margin: 12px 4px 6px; font: 600 10.5px -apple-system, sans-serif; letter-spacing: .08em; text-transform: uppercase; color: var(--faint); }
+
+  /* agora */
+  .card { position: relative; display: grid; grid-template-columns: 26px 1fr auto; gap: 10px; align-items: center; width: 100%; text-align: left; padding: 10px 12px; border-radius: 12px; background: var(--card); margin-bottom: 6px; overflow: hidden; }
+  .card:hover { background: color-mix(in srgb, var(--card) 70%, var(--text) 8%); }
+  .card .t { font-weight: 550; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .card .s { color: var(--mute); font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .card .time { color: var(--mute); font-size: 11.5px; }
+  .card.busy .time { color: var(--teal); }
+  /* brilho correndo no cartão de quem está trabalhando */
+  .card.busy::after { content: ""; position: absolute; inset: 0; background: linear-gradient(100deg, transparent 30%, color-mix(in srgb, var(--teal) 16%, transparent) 50%, transparent 70%); background-size: 220% 100%; animation: sheen 2.2s linear infinite; pointer-events: none; }
+  @keyframes sheen { from { background-position: 120% 0; } to { background-position: -100% 0; } }
+  .eq { display: flex; gap: 3px; align-items: flex-end; height: 16px; justify-content: center; }
+  .eq i { width: 3.5px; border-radius: 2px; background: var(--teal); height: 30%; animation: eq .9s ease-in-out infinite; }
+  .eq i:nth-child(2) { animation-delay: -.25s; } .eq i:nth-child(3) { animation-delay: -.5s; }
+  @keyframes eq { 50% { height: 100%; } }
+  .rest { width: 8px; height: 8px; border-radius: 50%; background: var(--faint); margin: 0 auto; }
+  .rest.hit { background: var(--red); }
+  .quiet { display: flex; align-items: center; gap: 12px; padding: 14px 12px; border-radius: 12px; background: var(--card); color: var(--mute); }
+  .quiet .logo { width: 38px; line-height: 0; color: var(--faint); animation: drift 5s ease-in-out infinite; }
+  @keyframes drift { 50% { transform: translate(3px, -3px); } }
+
+  /* contas */
+  .prov { display: grid; grid-template-columns: 62px 1fr; gap: 8px; align-items: start; padding: 5px 4px; }
+  .prov > span { color: var(--mute); padding-top: 4px; }
+  .pills { display: flex; flex-wrap: wrap; gap: 5px; }
+  .pill { position: relative; display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px 3px 7px; border-radius: 999px; background: var(--card); font-size: 12px; overflow: hidden; max-width: 100%; }
+  .pill i { width: 7px; height: 7px; border-radius: 50%; background: var(--faint); flex: none; }
+  .pill.ok i { background: var(--teal); }
+  .pill.use i { background: var(--teal); box-shadow: 0 0 0 0 var(--teal); animation: ring 1.4s ease-out infinite; }
+  @keyframes ring { to { box-shadow: 0 0 0 6px transparent; } }
+  .pill.off { color: var(--mute); }
+  .pill.lim { color: var(--red); } .pill.lim i { background: var(--red); }
+  .pill.lim em { font-style: normal; opacity: .85; }
+  .pill .bar { position: absolute; left: 0; bottom: 0; height: 2px; background: var(--red); opacity: .7; }
+  .pill span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  /* pedido rápido */
+  .ask { margin-top: 12px; background: var(--card); border-radius: 12px; padding: 9px 9px 7px 12px; border: 1px solid transparent; }
+  .ask:focus-within { border-color: color-mix(in srgb, var(--teal) 55%, transparent); }
+  .ask .in { display: flex; gap: 8px; align-items: center; }
+  .ask input { flex: 1; min-width: 0; border: 0; background: none; outline: none; font-size: 13.5px; -webkit-user-select: text; user-select: text; }
+  .ask input::placeholder { color: var(--faint); }
+  .ask .go { width: 24px; height: 24px; border-radius: 50%; background: var(--ink); color: var(--on-ink); display: grid; place-items: center; flex: none; }
+  .ask .go:disabled { opacity: .3; }
+  .ask small { display: block; color: var(--faint); font-size: 11px; margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  footer { display: flex; align-items: center; justify-content: space-between; margin-top: 10px; padding: 9px 4px 0; border-top: 1px solid var(--line); color: var(--mute); font-size: 12px; }
+  footer .acts { display: flex; gap: 14px; }
+  footer button:hover { color: var(--text); }
+  .sw { display: inline-flex; align-items: center; gap: 7px; }
+  .sw b { width: 26px; height: 15px; border-radius: 999px; background: var(--faint); position: relative; transition: background .15s; }
+  .sw b::after { content: ""; position: absolute; top: 2px; left: 2px; width: 11px; height: 11px; border-radius: 50%; background: #fff; transition: transform .15s; }
+  .sw.on b { background: var(--teal); } .sw.on b::after { transform: translateX(11px); }
+  @media (prefers-reduced-motion: reduce) { * { animation: none !important; } }
+</style>
+</head>
+<body>
+<div id="root">
+  <header><span class="logo" id="logo"></span><b>Revoada</b><span class="sum" id="sum"></span></header>
+  <div id="now"></div>
+  <h6>Contas</h6>
+  <div id="accounts"></div>
+  <form class="ask" id="ask">
+    <div class="in"><input id="q" placeholder="Peça qualquer coisa" autocomplete="off" spellcheck="false" aria-label="Pedido rápido">
+      <button class="go" id="go" aria-label="Enviar"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg></button></div>
+    <small id="askSub"></small>
+  </form>
+  <footer><button class="sw" id="rot"><b></b>Rodízio</button>
+    <span class="acts"><button data-open="go({type:'brain'})" id="brain"></button><button data-open="">Abrir a Revoada</button></span></footer>
+</div>
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const store = (k, d) => { try { return localStorage.getItem(k) ?? d; } catch { return d; } };
+const inApp = !!window.webkit?.messageHandlers?.revoada;
+const native = (msg) => inApp && window.webkit.messageHandlers.revoada.postMessage(msg);
+if (!inApp) document.body.classList.add("preview");
+let S = null, logoSvg = "";
+
+const dur = (ms) => { const s = Math.max(0, Math.floor(ms / 1000)); return s < 60 ? `${s}s` : s < 3600 ? `${Math.floor(s / 60)}m ${String(s % 60).padStart(2, "0")}s` : `${Math.floor(s / 3600)}h ${String(Math.floor((s % 3600) / 60)).padStart(2, "0")}m`; };
+const left = (ms) => { const m = Math.max(0, Math.ceil(ms / 60000)); return m < 60 ? `${m}min` : `${Math.floor(m / 60)}h${String(m % 60).padStart(2, "0")}`; };
+const acc = (id) => S.accounts.find((a) => a.id === id);
+const prov = (id) => S.providers.find((p) => p.id === id);
+const accName = (a) => (a ? `${prov(a.provider).name} · ${a.label}` : "conta removida");
+const base = (p) => p.split("/").filter(Boolean).pop() || "/";
+const ready = (a) => a.status.ok && !a.limit;
+
+function target() {
+  const saved = JSON.parse(store("targets", "[]")).filter((t) => t.startsWith("pool:") ? S.accounts.some((a) => a.provider === t.slice(5) && ready(a)) : acc(t) && ready(acc(t)));
+  if (saved.length) return saved[0];
+  const p = S.providers.find((p) => S.accounts.some((a) => a.provider === p.id && ready(a)));
+  return p ? "pool:" + p.id : null;
+}
+const cwd = () => store("cwd", S.home + "/git");
+
+function render() {
+  if (!S) return;
+  const live = S.sessions.filter((s) => s.alive), busy = live.filter((s) => s.busy), idle = live.filter((s) => !s.busy);
+  const chats = (S.convos || []).filter((c) => c.working);
+  const runs = S.runs.filter((r) => r.running), working = busy.length + runs.length + chats.length;
+  const inUse = new Set([...busy.map((s) => s.accountId), ...chats.map((c) => c.accountId)]);
+  $("logo").classList.toggle("fly", working > 0);
+  $("sum").textContent = working ? `${working} trabalhando` : live.length ? `${live.length} ${live.length === 1 ? "aberta" : "abertas"}` : "tudo quieto";
+
+  const card = (cls, icon, title, sub, at, open) => `<button class="card ${cls}" data-open="${esc(open)}">${icon}<div style="min-width:0"><div class="t">${esc(title)}</div><div class="s">${esc(sub)}</div></div><span class="time num mono" data-since="${at}"></span></button>`;
+  const eq = `<span class="eq"><i></i><i></i><i></i></span>`;
+  let now = chats.map((c) => c.waiting ? card("", `<span class="rest hit" style="background:var(--amber)"></span>`, c.title, `${accName(acc(c.accountId))} · esperando sua permissão`, c.startedAt, `go({type:'chat',id:'${c.id}'})`) : card("busy", eq, c.title, `${accName(acc(c.accountId))} · ${base(c.cwd)}`, c.startedAt, `go({type:'chat',id:'${c.id}'})`)).join("") + busy.map((s) => card("busy", eq, s.title, `${accName(acc(s.accountId))} · ${base(s.cwd)}`, s.startedAt, `go({type:'session',id:'${s.id}'})`)).join("")
+    + runs.map((r) => card("busy", eq, r.title, `${r.jobs} contas em paralelo · ${base(r.cwd)}`, r.at, `go({type:'run',id:'${r.id}'})`)).join("")
+    + idle.map((s) => card("", `<span class="rest ${s.limitHit ? "hit" : ""}"></span>`, s.title, `${accName(acc(s.accountId))} · ${s.limitHit ? "bateu no limite" : "parada, pode estar esperando você"}`, s.startedAt, `go({type:'session',id:'${s.id}'})`)).join("");
+  if (!now) now = `<div class="quiet"><span class="logo">${logoSvg}</span><span>Nenhum agente trabalhando.<br>Peça algo aqui embaixo.</span></div>`;
+  if (render.now !== now) $("now").innerHTML = render.now = now;
+
+  const accs = S.providers.filter((p) => p.installed).map((p) => `<div class="prov"><span>${p.name}</span><div class="pills">${S.accounts.filter((a) => a.provider === p.id).map((a) => {
+    if (a.limit) return `<button class="pill lim" data-open="go({type:'accounts'})" title="${esc(a.limit.reason)}"><i></i><span>${esc(a.label)}</span><em class="num" data-left="${a.limit.until}"></em><b class="bar" data-from="${a.limit.at}" data-to="${a.limit.until}"></b></button>`;
+    if (!a.status.ok) return `<button class="pill off" data-open="go({type:'accounts'})" title="sem login"><i></i><span>${esc(a.label)} · sem login</span></button>`;
+    const top = Math.max(0, ...(a.usage || []).map((u) => u.pct)), note = (a.usage || []).map((u) => `${{ five_hour: "5h", seven_day: "7 dias" }[u.key] || u.key}: ${u.pct}%`).join(" · ");
+    return `<button class="pill ${inUse.has(a.id) ? "use" : "ok"}" data-open="go({type:'accounts'})" title="${inUse.has(a.id) ? "em uso" : "pronta"}${note ? " · " + note : ""}"><i></i><span>${esc(a.label)}</span>${a.usage?.length ? `<em class="num" style="font-style:normal;opacity:.6">${top}%</em><b class="bar" style="width:${top}%;background:var(--${top >= 95 ? "red" : top >= 75 ? "amber" : "teal"})"></b>` : ""}</button>`;
+  }).join("")}</div></div>`).join("");
+  if (render.accs !== accs) $("accounts").innerHTML = render.accs = accs;
+
+  const t = target();
+  $("go").disabled = !t;
+  $("askSub").textContent = t ? `${t.startsWith("pool:") ? prov(t.slice(5)).name : accName(acc(t))} · em ${cwd().replace(S.home, "~")}${store("brain", "1") === "1" ? " · com o cérebro" : ""}` : "Nenhuma conta pronta. Faça login em Contas.";
+  $("rot").classList.toggle("on", S.settings.rotate);
+  const blocked = Object.values(S.brain.blocked || {}).reduce((a, b) => a + b, 0);
+  $("brain").textContent = `Cérebro · ${S.brain.notes}`;
+  $("brain").title = `${S.brain.notes} notas, ${blocked} fora do contexto`;
+  tick();
+}
+
+// cronômetros e contagens regressivas andam sozinhos entre uma leitura e outra
+function tick() {
+  const now = Date.now();
+  document.querySelectorAll("[data-since]").forEach((el) => (el.textContent = dur(now - +el.dataset.since)));
+  document.querySelectorAll("[data-left]").forEach((el) => (el.textContent = left(+el.dataset.left - now)));
+  document.querySelectorAll(".bar[data-from]").forEach((el) => { const a = +el.dataset.from, b = +el.dataset.to; el.style.width = `${Math.max(0, Math.min(100, ((b - now) / (b - a)) * 100))}%`; });
+}
+
+async function refresh() {
+  try { S = await (await fetch(location.search.includes("demo") ? "/api/demo-state" : "/api/state")).json(); render(); } catch {}
+  if (S && !refresh.said) { refresh.said = true; native({ ready: `${$("sum").textContent}, ${S.accounts.length} contas, ${document.querySelectorAll(".pill").length} pastilhas` }); }
+}
+window.refresh = refresh;
+
+document.addEventListener("click", (e) => { const b = e.target.closest("[data-open]"); if (b) native({ open: b.dataset.open }); });
+$("rot").onclick = async () => { await fetch("/api/settings", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ rotate: !S.settings.rotate }) }); refresh(); };
+$("ask").onsubmit = async (e) => {
+  e.preventDefault();
+  const prompt = $("q").value.trim(), t = target(); if (!prompt || !t) return;
+  $("go").disabled = true;
+  const r = await (await fetch("/api/chat", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ prompt, targets: [t], cwd: cwd(), brain: store("brain", "1") === "1" }) })).json();
+  $("q").value = "";
+  if (r.id) native({ open: `refresh().then(() => go({type:'${r.kind}',id:'${r.id}'}))` });
+  refresh();
+};
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") native({ close: true }); });
+new ResizeObserver(() => native({ height: Math.ceil($("root").getBoundingClientRect().height) })).observe($("root"));
+
+fetch("/logo.svg").then((r) => r.text()).then((svg) => { logoSvg = svg; $("logo").innerHTML = svg; render.now = null; render(); });
+refresh();
+setInterval(refresh, 1500);
+setInterval(tick, 1000);
+</script>
+</body>
+</html>

@@ -1,0 +1,19 @@
+#!/usr/bin/env bun
+// Codex de mentira para os testes. A conta sem CODEX_HOME (a "padrão") está sempre no limite;
+// as outras respondem contando o que receberam, pra o teste conferir retomada e histórico.
+import { writeFileSync } from "fs";
+import { basename } from "path";
+const a = process.argv.slice(2), all = a.join("\n"), out = (o: unknown) => console.log(JSON.stringify(o));
+if (a[0] === "login") { console.log("Logged in using ChatGPT"); process.exit(0); }
+const home = process.env.CODEX_HOME;
+if (!home) {
+  out({ type: "thread.started", thread_id: "t-padrao" });
+  out({ type: "item.completed", item: { id: "item_0", type: "command_execution", command: "ls", aggregated_output: "a.txt", exit_code: 0, status: "completed" } });
+  out({ type: "turn.failed", error: { message: "You've hit your usage limit. Try again in 2 hours 5 minutes." } });
+  process.exit(1);
+}
+const name = basename(home), resume = a[1] === "resume" ? a[2] : null;
+if (all.includes("CRIA-ARQUIVO")) writeFileSync("novo.txt", "feito pelo agente");
+if (!resume) out({ type: "thread.started", thread_id: `t-${name}` });
+out({ type: "item.completed", item: { id: "item_0", type: "agent_message", text: resume ? `retomei ${resume}` : `nova; historico=${all.includes("<conversa-anterior>")}; viu-retomada=${all.includes("retomei")}; viu-comando=${all.includes("rodou: ls")}; cerebro=${all.includes("<contexto-do-cerebro>")}; imagens=${a.filter((x) => x === "-i").length}` } });
+out({ type: "turn.completed", usage: {} });
