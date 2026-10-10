@@ -94,3 +94,39 @@ describe("o que o painel de uso mostra", () => {
     expect([c.model, c.effort]).toEqual(["gpt-teste", "high"]);
   }, SLOW);
 });
+
+describe("tentar de novo e editar", () => {
+  test("volta a conversa ao ponto da mensagem, manda de novo e começa sessão nova com o que ficou", async () => {
+    const reserva = (await env.api("state")).accounts.find((a: any) => a.label === "reserva").id;
+    const id = await env.chat(reserva, "primeira");
+    await env.idle(id);
+    await env.api(`convos/${id}/send`, "POST", { text: "segunda" });
+    let c = await env.idle(id);
+    expect(c.messages.map((m: any) => m.text || "resposta")).toEqual(["primeira", "resposta", "segunda", "resposta"]);
+    expect(texts(c)).toContain("retomei");
+
+    // tentar de novo a última: a resposta antiga sai, o pedido é o mesmo, e o agente recebe o histórico em vez de retomar
+    await env.api(`convos/${id}/rewind`, "POST", { index: 2 });
+    c = await env.idle(id);
+    expect(c.messages.map((m: any) => m.text || "resposta")).toEqual(["primeira", "resposta", "segunda", "resposta"]);
+    expect(texts(c)).toContain("nova; historico=true");
+
+    // editar a primeira: tudo o que veio depois sai, e não sobra histórico pra mandar
+    await env.api(`convos/${id}/rewind`, "POST", { index: 0, text: "primeira, corrigida" });
+    c = await env.idle(id);
+    expect(c.messages.map((m: any) => m.text || "resposta")).toEqual(["primeira, corrigida", "resposta"]);
+    expect(texts(c)).toContain("nova; historico=false");
+  }, SLOW);
+
+  test("só volta a mensagem do usuário, com texto, e com o agente parado", async () => {
+    const id = await env.chat("claude-padrao", "DEMO-RICA devagar");
+    const busy = await fetch(`${env.origin}/api/convos/${id}/rewind`, { method: "POST", headers: { origin: env.origin, "content-type": "application/json" }, body: JSON.stringify({ index: 0 }) });
+    expect([busy.status, (await busy.json() as any).error]).toEqual([400, "o agente ainda está respondendo"]);
+    await env.idle(id);
+    for (const body of [{ index: 1 }, { index: 9 }, { index: 0, text: "   " }]) {
+      const r = await fetch(`${env.origin}/api/convos/${id}/rewind`, { method: "POST", headers: { origin: env.origin, "content-type": "application/json" }, body: JSON.stringify(body) });
+      expect([JSON.stringify(body), r.status]).toEqual([JSON.stringify(body), 400]);
+    }
+    expect((await env.api(`convos/${id}`)).messages.length).toBe(2); // nada foi cortado nas tentativas recusadas
+  }, SLOW);
+});

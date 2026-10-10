@@ -245,8 +245,23 @@
   .todo { list-style: none; margin: 0; padding: 8px 12px; display: grid; gap: 4px; } .todo li.done { color: var(--faint); text-decoration: line-through; }
   .sys { font-size: 13px; padding: 8px 12px; border-radius: 10px; background: var(--soft); }
   .sys.amber { color: var(--amber); } .sys.red { color: var(--red); } .sys.mute { color: var(--mute); }
-  .working { display: flex; align-items: center; gap: 10px; color: var(--mute); font-size: 13px; }
-  .working i { width: 7px; height: 7px; border-radius: 50%; background: var(--teal); animation: pulse 1.1s ease-in-out infinite; }
+  /* linha de status: quatro pontos pulsando, o passo em curso e há quanto tempo */
+  .working { display: flex; align-items: center; gap: 12px; color: var(--mute); font-size: 14px; min-width: 0; }
+  .working .dots { display: grid; grid-template-columns: 5px 5px; gap: 3px; flex: none; }
+  .working .dots i { width: 5px; height: 5px; border-radius: 50%; background: var(--amber); animation: dot 1.2s ease-in-out infinite; }
+  .working .dots i:nth-child(2) { animation-delay: .15s; } .working .dots i:nth-child(4) { animation-delay: .3s; } .working .dots i:nth-child(3) { animation-delay: .45s; }
+  @keyframes dot { 0%, 100% { opacity: .25; transform: scale(.8); } 40% { opacity: 1; transform: scale(1); } }
+  @media (prefers-reduced-motion: reduce) { .working .dots i { animation: none; opacity: .7; } }
+  .working .now { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } .working .num { flex: none; color: var(--faint); }
+  .working.ask { color: var(--amber); }
+  /* ações da mensagem: aparecem ao passar o mouse; na última resposta ficam sempre à vista */
+  .mact { display: flex; gap: 2px; opacity: 0; transition: opacity .12s; }
+  .m:hover .mact, .m:focus-within .mact, .m:last-child .mact { opacity: 1; }
+  .mact button, .cpcode { display: inline-flex; align-items: center; gap: 6px; padding: 4px 8px; border-radius: 7px; color: var(--mute); font-size: 12.5px; }
+  .mact button:hover, .cpcode:hover { background: var(--soft); color: var(--text); } .mact button.ok, .cpcode.ok { color: var(--teal); }
+  .m.user .mact { margin-top: -2px; }
+  .bubble.editing { outline: 1.5px dashed var(--teal); outline-offset: 2px; }
+  .md pre .cpcode { position: absolute; top: 6px; right: 6px; background: var(--term); color: #c9d1cf; opacity: 0; transition: opacity .12s; } .md pre:hover .cpcode { opacity: 1; } .md pre:hover .lang { opacity: 0; }
   .send.stop { background: var(--red); }
   #queued { margin-top: 22px; gap: 10px; } #queued:empty { display: none; }
   #queued .bubble { opacity: .55; border: 1px dashed var(--faint); background: none; }
@@ -505,6 +520,7 @@ let useBrain = store.get("brain", "1") === "1", mode = store.get("mode", "ask"),
 // próxima mensagem provável: aparece no campo vazio quando o agente termina
 const suggestion = () => (view.type === "chat" && chat && !chat.working && chat.suggest && !$("prompt").value && !attached.length ? chat.suggest : "");
 let attached = []; // anexos esperando o próximo envio
+let rewriting = null; // índice da mensagem sua que está sendo reescrita no campo
 // modelo e esforço escolhidos, por provedor: { claude: { model: "opus", effort: "high" } }. Vazio = padrão da conta.
 const choice = JSON.parse(store.get("models", "{}"));
 const EFFORT_NAME = { low: "Baixo", medium: "Médio", high: "Alto", xhigh: "Muito alto", max: "Máximo" };
@@ -604,7 +620,7 @@ function go(v) {
   $("composer").classList.toggle("on", v.type === "home" || v.type === "chat");
   $("composer").classList.toggle("docked", v.type === "chat");
   if (v.type !== "chat") { chat = null; chatTarget = null; clearTimeout(loadChat.t); }
-  if (v.type !== "chat" || live.id !== v.id) closeLive();
+  if (v.type !== "chat" || live.id !== v.id) { closeLive(); rewriting = null; }
   document.querySelectorAll(".view").forEach((el) => el.classList.toggle("on", el.id === "v-" + type));
   document.querySelectorAll("aside [data-go]").forEach((b) => b.classList.toggle("on", b.dataset.go === v.type && v.type !== "home"));
   closePops(); renderThreads();
@@ -762,7 +778,7 @@ function paintComposer() {
   $("prompt").classList.toggle("sug", !!sug);
   if (sug && !$("prompt").value) $("notes").textContent = "sugestão · Tab aceita · Enter envia";
   else if ($("notes").textContent.startsWith("sugestão")) $("notes").textContent = "";
-  $("prompt").placeholder = sug ? sug : supervisor && !inChat ? "Descreva o trabalho inteiro: o supervisor divide em tarefas" : !inChat ? "Peça qualquer coisa" : chat?.waiting ? "Enter permite, Esc nega. Ou escreva a próxima mensagem" : busy ? "Escreva a próxima: entra quando o agente terminar" : "Responder";
+  $("prompt").placeholder = sug ? sug : supervisor && !inChat ? "Descreva o trabalho inteiro: o supervisor divide em tarefas" : !inChat ? "Peça qualquer coisa" : rewriting != null ? "Reescreva a mensagem. Enter manda de novo, Esc desiste" : chat?.waiting ? "Enter permite, Esc nega. Ou escreva a próxima mensagem" : busy ? "Escreva a próxima: entra quando o agente terminar" : "Responder";
   const ts = targets();
   const pv = curProvider(), ch = curChoice();
   $("modelChip").style.display = pv && !terminal ? "inline-flex" : "none";
@@ -835,7 +851,7 @@ $("popModel").addEventListener("keydown", (e) => { if (e.target.id === "modelFre
 // ---------- uso: janela de contexto e limites da conta ----------
 const WINDOW_NAME = { five_hour: "Limite de sessão", seven_day: "Semanal · todos os modelos" };
 const windowName = (k) => WINDOW_NAME[k] || (k.startsWith("seven_day_") ? `Semanal · ${k.slice(10).replace(/_/g, " ").replace(/^./, (c) => c.toUpperCase())}` : k.replace(/_/g, " "));
-const resets = (t) => { const ms = t - Date.now(); if (ms <= 0) return ""; const min = Math.round(ms / 60000); return ms < 86_400_000 ? `Reinicia em ${min >= 60 ? `${Math.floor(min / 60)} h ` : ""}${min % 60} min` : `Reinicia ${new Date(t).toLocaleString("pt-BR", { weekday: "short", hour: "2-digit", minute: "2-digit" })}`; };
+const resets = (t) => { const ms = t - Date.now(); if (ms <= 0) return ""; const min = Math.round(ms / 60000); return min < 1440 ? `Reinicia em ${min >= 60 ? `${Math.floor(min / 60)} h ` : ""}${min % 60} min` : `Reinicia ${new Date(t).toLocaleString("pt-BR", { weekday: "short", hour: "2-digit", minute: "2-digit" })}`; };
 // a conta cujo uso interessa agora: a que está respondendo a conversa, ou as que podem responder o próximo pedido
 function usageAccounts() {
   if (view.type === "chat" && chat?.accountId && acc(chat.accountId)) return [acc(chat.accountId)];
@@ -1005,6 +1021,7 @@ $("prompt").onkeydown = (e) => {
   if (view.type === "chat" && chat?.working && !$("prompt").value.trim() && !attached.length) return;
   $("send").click();
 };
+addEventListener("keydown", (e) => { if (e.key === "Escape" && rewriting != null && !document.querySelector("dialog[open]")) { e.preventDefault(); stopEditing(true); paintComposer(); } });
 addEventListener("keydown", (e) => {
   if (view.type !== "chat" || !chat?.waiting || e.metaKey || e.ctrlKey || e.altKey || e.isComposing || document.querySelector("dialog[open]")) return;
   if (e.key !== "Enter" && e.key !== "Escape") return;
@@ -1021,6 +1038,7 @@ $("send").onclick = async () => {
   const clear = () => { $("prompt").value = ""; $("prompt").style.height = "auto"; $("notes").textContent = ""; attached = []; paintAtts(); };
   if (view.type === "chat") {
     if (!text.trim() && !attached.length) return;
+    if (rewriting != null && !chat.working) { const index = rewriting; rewriting = null; await api(`convos/${chat.id}/rewind`, "POST", { index, text }); clear(); return loadChat(true); }
     await api(`convos/${chat.id}/send`, "POST", { text, target: ts[0], mode, brain: useBrain, attachments: attached, model: curChoice().model || null, effort: curChoice().effort || null });
     clear(); return loadChat(true);
   }
@@ -1064,8 +1082,6 @@ const running = (it) => (it.kind === "cmd" ? it.exit == null && it.status !== "f
 // uma linha que conta o que foi feito; enquanto algo roda, mostra o que é
 const stepLabel = (it) => (it.kind === "cmd" ? it.desc || it.command.split("\n")[0] : it.kind === "files" ? `Editando ${it.changes.map((c) => base(c.path)).join(", ")}` : it.kind === "tool" ? `${it.name} ${it.detail}` : "Pensando");
 function groupLabel(g, live) {
-  const now = g.findLast((it) => running(it)) || (live ? g.at(-1) : null);
-  if (now) return stepLabel(now);
   const n = { cmd: 0, files: 0, read: 0, search: 0, web: 0, tool: 0 };
   for (const it of g) {
     if (it.kind === "cmd") n.cmd++;
@@ -1079,7 +1095,7 @@ function groupLabel(g, live) {
   return text[0].toUpperCase() + text.slice(1) + (failed ? ` · ${plural(failed, "falhou", "falharam")}` : "");
 }
 function groupHtml(g, key, i, live) {
-  return `<details class="acts" data-key="${esc(key)}" ${openActs.has(key) ? "open" : ""}><summary><span class="lbl">${esc(groupLabel(g, live))}</span>${g.length > 1 && live ? `<span class="cnt">${g.filter((x) => x.kind !== "think").length} passos</span>` : ""}</summary><div class="in">${g.map((it) => itemHtml(it, `${i}:${it.k}`)).join("")}</div></details>`;
+  return `<details class="acts" data-key="${esc(key)}" ${openActs.has(key) ? "open" : ""}><summary><span class="lbl">${esc(groupLabel(g, live))}</span></summary><div class="in">${g.map((it) => itemHtml(it, `${i}:${it.k}`)).join("")}</div></details>`;
 }
 // o que a pessoa colou vem com buracos; o aviso de interrupção do CLI não é fala dela
 const tidy = (t) => String(t || "").replace(/\n{3,}/g, "\n\n").trim();
@@ -1090,7 +1106,8 @@ function msgParts(m, i) {
   if (m.role === "user") {
     const text = tidy(m.text);
     if (INTERRUPTED.test(text)) return [["u", `<div class="sys mute">Você interrompeu a resposta.</div>`]];
-    return [["u", (m.attachments?.length ? `<div class="atts">${m.attachments.map((a) => attHtml(a)).join("")}</div>` : "") + (text ? `<div class="bubble">${esc(text)}</div>` : "")]];
+    return [["u", (m.attachments?.length ? `<div class="atts">${m.attachments.map((a) => attHtml(a)).join("")}</div>` : "") + (text ? `<div class="bubble ${rewriting === i ? "editing" : ""}">${esc(text)}</div>` : "")
+      + (text ? `<div class="mact">${actBtn("copy", i, "Copiar")}${chat.working ? "" : actBtn("edit", i, "Editar", "Volta a conversa para este ponto e manda a mensagem de novo, com o texto que você ajustar. O que veio depois sai da conversa.")}</div>` : "")]];
   }
   const took = Math.round(((m.endedAt || Date.now()) - m.at) / 1000), items = m.items || [];
   // o cartão de permissão já mostra o comando: a linha dele some enquanto espera, e depois de permitido fica só a linha
@@ -1111,12 +1128,29 @@ function msgParts(m, i) {
     if (h) parts.push([it.k, h]);
   }
   flush(m.state === "working"); // o último grupo de uma resposta em andamento é o que está acontecendo agora
+  const asking = pending.length > 0, said = reviewText(m);
+  // o que está acontecendo agora, numa linha: o passo em curso (ou o último), e há quanto tempo
+  const cur = items.findLast((x) => QUIET.has(x.kind) || x.kind === "text");
+  const now = !cur ? "Pensando" : cur.kind === "text" ? "Escrevendo a resposta" : stepLabel(cur);
+  const lastUser = chat.messages.findLastIndex((x, j) => j < i && x.role === "user");
   const tail = ""
-    + (m.state === "working" ? (m.items?.some((i) => i.kind === "ask" && i.state === "pending") ? `<div class="working" style="color:var(--amber)"><i style="background:var(--amber)"></i>esperando você</div>` : `<div class="working"><i></i>trabalhando há <span class="num" data-since="${m.at}"></span></div>`) : "")
+    + (m.state === "working" ? (asking ? `<div class="working ask"><span class="dots"><i></i><i></i><i></i><i></i></span><span class="now">Esperando você</span><span class="num" data-since="${m.at}"></span></div>` : `<div class="working"><span class="dots"><i></i><i></i><i></i><i></i></span><span class="now">${esc(now)}</span><span class="num" data-since="${m.at}"></span></div>`) : "")
+    + (m.state !== "working" && (said || m.error || m.state === "stopped") ? `<div class="mact">${said ? actBtn("copy", i, "Copiar") : ""}${i === chat.messages.length - 1 && lastUser >= 0 && !m.review && !chat.working ? actBtn("retry", lastUser, "Tentar de novo", "Descarta esta resposta e manda o mesmo pedido outra vez. Arquivos que ela já mexeu ficam como estão.") : ""}</div>` : "")
     + (m.error ? `<div class="sys red">${esc(m.error)}</div>` : "")
     + (m.review && m.state === "done" && i === chat.messages.length - 1 && !/^\s*nada a corrigir/i.test(reviewText(m)) ? `<div><button class="btn line" data-fix="${i}" title="Manda os achados para o agente que fez o trabalho. Ele confere cada um antes de mexer.">Mandar o autor corrigir</button></div>` : "");
   if (tail) parts.push(["tail", tail]);
   return parts;
+}
+const ACT_ICON = {
+  copy: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg>',
+  edit: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>',
+  retry: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/></svg>',
+};
+const actBtn = (kind, i, name, hint) => `<button data-act="${kind}" data-i="${i}" title="${esc(hint || name)}" aria-label="${esc(name)}">${ACT_ICON[kind]}<span>${name}</span></button>`;
+function stopEditing(clear) { if (rewriting == null) return; rewriting = null; if (clear) { $("prompt").value = ""; $("prompt").style.height = "auto"; } if (chat) renderChat(); }
+async function copyText(text, el) {
+  try { await navigator.clipboard.writeText(text); } catch { const t = document.createElement("textarea"); t.value = text; document.body.appendChild(t); t.select(); document.execCommand("copy"); t.remove(); }
+  if (el) { const span = el.querySelector("span"), was = span?.textContent; el.classList.add("ok"); if (span) span.textContent = "Copiado"; setTimeout(() => { el.classList.remove("ok"); if (span && span.isConnected) span.textContent = was; }, 1400); }
 }
 const dur = (s) => (s < 60 ? `${s}s` : s < 3600 ? `${Math.floor(s / 60)}m ${String(s % 60).padStart(2, "0")}s` : `${Math.floor(s / 3600)}h ${String(Math.floor((s % 3600) / 60)).padStart(2, "0")}m`);
 const tok = (n) => (n >= 1e6 ? `${(n / 1e6).toFixed(1).replace(".", ",")}M` : n >= 1000 ? `${(n / 1000).toFixed(n >= 1e5 ? 0 : 1).replace(".", ",")}k` : String(n));
@@ -1156,6 +1190,16 @@ $("chActs").onclick = async (e) => {
   loadChat(true);
 };
 $("msgs").addEventListener("click", async (e) => {
+  const act = e.target.closest("[data-act]");
+  if (act && chat) {
+    const i = +act.dataset.i, m = chat.messages[i];
+    if (!m) return;
+    if (act.dataset.act === "copy") return copyText(m.role === "user" ? tidy(m.text) : reviewText(m), act);
+    if (act.dataset.act === "retry") { act.disabled = true; await api(`convos/${chat.id}/rewind`, "POST", { index: i }).catch(() => {}); return loadChat(true); }
+    if (act.dataset.act === "edit") { rewriting = i; const p = $("prompt"); p.value = m.text || ""; p.dispatchEvent(new Event("input", { bubbles: true })); p.focus(); p.setSelectionRange(p.value.length, p.value.length); renderChat(); return; }
+  }
+  const code = e.target.closest("[data-copy-code]");
+  if (code) return copyText(code.parentElement.querySelector("code").innerText, code);
   const xr = e.target.closest("[data-xray]");
   if (xr) { const k = `x:${xr.dataset.xray}`; openActs.has(k) ? openActs.delete(k) : openActs.add(k); return renderChat(); }
   const fix = e.target.closest("[data-fix]");
@@ -1174,6 +1218,13 @@ $("queued").addEventListener("click", async (e) => {
   const b = e.target.closest("[data-unq]"); if (!b || !chat) return;
   await api(`convos/${chat.id}/queue/${b.dataset.unq}`, "DELETE").catch(() => {});
   loadChat(true);
+});
+$("msgs").addEventListener("mouseover", (e) => {
+  const pre = e.target.closest?.(".md pre");
+  if (!pre || pre.querySelector("[data-copy-code]")) return;
+  const b = document.createElement("button");
+  b.dataset.copyCode = "1"; b.className = "cpcode"; b.title = "Copiar o bloco"; b.innerHTML = `${ACT_ICON.copy}<span>Copiar</span>`;
+  pre.appendChild(b);
 });
 $("msgs").addEventListener("toggle", (e) => { const k = e.target.dataset?.key; if (k) e.target.open ? openActs.add(k) : openActs.delete(k); }, true);
 function renderChat() {
@@ -1203,7 +1254,7 @@ function renderChat() {
   if ($("chActs").innerHTML !== acts) $("chActs").innerHTML = acts;
   paintComposer();
 }
-function tickChat() { document.querySelectorAll("#msgs [data-since]").forEach((el) => { const s = Math.floor((Date.now() - +el.dataset.since) / 1000); el.textContent = s < 60 ? `${s}s` : `${Math.floor(s / 60)}m ${String(s % 60).padStart(2, "0")}s`; }); }
+function tickChat() { document.querySelectorAll("#msgs [data-since]").forEach((el) => { const s = Math.floor((Date.now() - +el.dataset.since) / 1000); el.textContent = s < 60 ? `${s} s` : s < 3600 ? `${Math.floor(s / 60)} min ${s % 60} s` : `${Math.floor(s / 3600)} h ${Math.floor((s % 3600) / 60)} min`; }); }
 setInterval(() => view.type === "chat" && tickChat(), 1000);
 // Conversa ao vivo: o servidor avisa a cada mudança (texto chegando, comando, permissão) e a tela
 // aplica só o que mudou. Se a conexão cair, o navegador religa sozinho e recebe tudo de novo;

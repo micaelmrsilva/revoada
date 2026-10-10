@@ -224,6 +224,72 @@ describe.skipIf(!CHROME)("tela", () => {
     await page(`go({ type: "home" });`);
   }, SLOW);
 
+  test("linha de status mostra o passo em curso e o tempo; no fim sobram as ações da mensagem", async () => {
+    const id = await env.chat("claude-padrao", "DEMO-RICA: status");
+    await page(`window.seen = new Set(); window.times = new Set(); go({ type: "chat", id: "${id}" });
+      window.watch = setInterval(() => { const n = document.querySelector("#msgs .working .now"), t = document.querySelector("#msgs .working .num"); if (n) seen.add(n.textContent); if (t && t.textContent) times.add(t.textContent); }, 15);`);
+    await until(`chat && chat.id === "${id}" && !chat.working && document.querySelector("#msgs table")`);
+    const live = await page(`clearInterval(watch); return { seen: [...seen], time: [...times].every((t) => /^\\d+ s$/.test(t)) && times.size > 0, dots: document.querySelectorAll("#msgs .working").length };`);
+    expect(live.seen).toContain("Confere o andamento da criação da rodada r9"); // o passo, com as palavras do agente
+    expect(live.seen).toContain("Escrevendo a resposta");
+    expect([live.time, live.dots]).toEqual([true, 0]); // tempo no formato "12 s"; terminou, a linha some
+
+    // copiar leva o texto como o agente escreveu (markdown), não o HTML
+    await page(`window.copied = []; Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText: async (t) => { copied.push(t); } } });`);
+    const acts = await page(`const ms = [...document.querySelectorAll("#msgs > .m")]; const names = (el) => [...el.querySelectorAll(".mact button")].map((b) => b.getAttribute("aria-label"));
+      ms.at(-1).querySelector('[data-act="copy"]').click(); ms[0].querySelector('[data-act="copy"]').click(); await new Promise((r) => setTimeout(r, 80));
+      return { user: names(ms[0]), bot: names(ms.at(-1)), table: copied[0].includes("| Conta | Registrados (de 500) |"), mine: copied[1], feedback: ms.at(-1).querySelector('[data-act="copy"] span').textContent };`);
+    expect(acts).toEqual({ user: ["Copiar", "Editar"], bot: ["Copiar", "Tentar de novo"], table: true, mine: "DEMO-RICA: status", feedback: "Copiado" });
+    // bloco de código ganha o botão de copiar quando o mouse passa
+    expect(await page(`const pre = document.querySelector("#msgs .md pre"); pre.dispatchEvent(new MouseEvent("mouseover", { bubbles: true })); pre.querySelector("[data-copy-code]").click(); await new Promise((r) => setTimeout(r, 50)); return copied.at(-1);`)).toBe("./criar-contas.sh --rodada r9 --so-o-que-falta");
+  }, SLOW);
+
+  test("editar reescreve a mensagem no campo e volta a conversa; Esc desiste; tentar de novo refaz a resposta", async () => {
+    const id = await env.chat("claude-padrao", "oi");
+    await env.idle(id);
+    await page(`go({ type: "chat", id: "${id}" });`);
+    await until(`chat && chat.id === "${id}" && document.querySelector('#msgs [data-act="edit"]')`);
+    // Esc desiste e limpa o campo
+    await page(`document.querySelector('#msgs [data-act="edit"]').click();`);
+    expect(await page(`return [document.querySelector("#prompt").value, !!document.querySelector("#msgs .bubble.editing"), document.querySelector("#prompt").placeholder.startsWith("Reescreva")]`)).toEqual(["oi", true, true]);
+    await page(`window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));`);
+    expect(await page(`return [document.querySelector("#prompt").value, !!document.querySelector("#msgs .bubble.editing")]`)).toEqual(["", false]);
+    // editar de verdade
+    await page(`document.querySelector('#msgs [data-act="edit"]').click(); const p = document.querySelector("#prompt"); p.value = "oi, com mais contexto"; p.dispatchEvent(new Event("input", { bubbles: true })); ${key("Enter")}`);
+    let c = await env.until(async () => { const x = await env.api(`convos/${id}`); return x.messages[0].text === "oi, com mais contexto" && !x.working && x; });
+    expect(c.messages.length).toBe(2);
+    await until(`!chat.working && document.querySelector("#msgs .bubble").textContent === "oi, com mais contexto" && !document.querySelector("#msgs .bubble.editing")`);
+    // tentar de novo: mesma pergunta, resposta nova
+    const before = c.messages[1].at;
+    await page(`document.querySelector('#msgs [data-act="retry"]').click();`);
+    c = await env.until(async () => { const x = await env.api(`convos/${id}`); return x.messages.length === 2 && !x.working && x.messages[1].at > before && x; });
+    expect(c.messages[0].text).toBe("oi, com mais contexto");
+  }, SLOW);
+
+  test("modelo e esforço se escolhem no campo e vão com o pedido; o anel abre janela de contexto e limites", async () => {
+    const id = await env.chat("claude-padrao", "DEMO-RICA: uso");
+    await env.idle(id);
+    await page(`localStorage.removeItem("models"); for (const k of Object.keys(choice)) delete choice[k]; go({ type: "chat", id: "${id}" });`);
+    await until(`chat && chat.id === "${id}" && !chat.working && document.querySelector("#modelChip .lb")`);
+    expect(await page(`return document.querySelector("#modelChip .lb").textContent`)).toBe("Modelo padrão");
+    await page(`document.querySelector("#modelChip").click(); document.querySelector('#popModel [data-model="opus"]').click(); document.querySelector('#popModel [data-effort="high"]').click();`);
+    expect(await page(`return [document.querySelector("#modelChip .lb").textContent, [...document.querySelectorAll("#popModel [data-effort]")].map((b) => b.textContent)]`)).toEqual(["Opus · Alto", ["Padrão", "Baixo", "Médio", "Alto", "Muito alto", "Máximo"]]);
+    await page(`closePops(); mode = "edit"; const p = document.querySelector("#prompt"); p.value = "com opus"; p.dispatchEvent(new Event("input", { bubbles: true })); ${key("Enter")}`);
+    const c = await env.until(async () => { const x = await env.api(`convos/${id}`); return x.messages.length === 4 && !x.working && x; });
+    expect([c.model, c.effort, c.messages.at(-1).model]).toEqual(["opus", "high", "claude-opus-teste"]);
+    await until(`!chat.working && document.querySelector("#msgs > .m:last-child .mdl")`);
+    expect(await page(`return document.querySelector("#msgs > .m:last-child .mdl").textContent`)).toBe("opus-teste");
+
+    // painel de uso: a janela desta conversa e os limites da conta que responde
+    await page(`document.querySelector("#usageChip").click();`);
+    const use = await page(`const p = document.querySelector("#popUsage"); return { on: p.classList.contains("on"), rows: [...p.querySelectorAll(".u")].map((u) => u.querySelector("span").textContent + " | " + u.querySelector("small").textContent.replace(/\\s+/g, " ").trim()), fits: p.getBoundingClientRect().right <= innerWidth && p.getBoundingClientRect().left >= 0 };`);
+    expect(use.on && use.fits).toBe(true);
+    expect(use.rows[0]).toBe("Janela de contexto | 53,9k / 200k (27%)");
+    expect(use.rows[1]).toMatch(/^Limite de sessão \| Reinicia em (5\d|60|1 h 0) min 42%$/);
+    expect(use.rows[2]).toMatch(/^Semanal · todos os modelos \| Reinicia (em 23 h \d+ min|\S+,? \d\d:\d\d) 10%$/);
+    await page(`closePops(); localStorage.removeItem("models"); for (const k of Object.keys(choice)) delete choice[k];`);
+  }, SLOW);
+
   test("Esc nega, e o cartão de negado com comando comprido não alarga a conversa", async () => {
     const id = await env.chat("claude-padrao", "DEMO-RICA: nega esta", { mode: "ask" });
     await page(`go({ type: "chat", id: "${id}" });`);

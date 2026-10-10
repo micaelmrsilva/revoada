@@ -245,6 +245,7 @@ export function createConvos(d: {
   const asks = new Map<string, Map<string, (allow: boolean) => void>>(); // conversa -> pedido -> resposta
   const timers = new Map<string, any>();
   const watchers = new Map<string, Set<() => void>>(); // quem está com a conversa aberta na tela
+  const epochs = new Map<string, number>(); // sobe quando a conversa é cortada: o aviso "só o que mudou" deixa de valer
 
   for (const f of readdirSync(d.dir)) {
     if (!f.endsWith(".json")) continue;
@@ -559,13 +560,30 @@ Responda em português, com uma lista numerada do mais grave para o menos. Cada 
     return "sent" as const;
   }
 
+  // Tentar de novo e editar: a conversa volta para antes da mensagem `index` do usuário e ela é mandada
+  // outra vez (com o texto novo, se houver). O que veio depois sai da conversa. A sessão do agente é
+  // abandonada, porque nenhum CLI desfaz um trecho dela: o próximo começa do zero, com o histórico do que
+  // ficou. Arquivos que a resposta descartada já tinha mexido continuam como estão.
+  function rewind(c: Convo, index: number, text?: string) {
+    if (c.working) throw new Error("o agente ainda está respondendo");
+    const m = c.messages[index];
+    if (!m || m.role !== "user") throw new Error("só dá para voltar a uma mensagem sua");
+    const next = text === undefined ? m.text || "" : text;
+    if (!next.trim() && !m.attachments?.length) throw new Error("escreva a mensagem");
+    c.messages.length = index;
+    epochs.set(c.id, (epochs.get(c.id) || 0) + 1); // quem está assistindo precisa receber a conversa inteira de novo
+    c.native = null;
+    delete c.queue;
+    return send(c, next, { attachments: m.attachments });
+  }
+
   // Conversa ao vivo: em vez de a página perguntar de tempo em tempo, o servidor avisa a cada mudança.
   // O primeiro aviso leva tudo; os seguintes, só os itens da última mensagem que mudaram e as
   // mensagens novas. No máximo um aviso a cada ~30 ms, pra texto chegando não virar enxurrada.
   const STREAM_GAP_MS = 30;
   function watch(id: string, push: (ev: unknown) => void) {
     if (!convos.has(id)) return null;
-    let seen = 0, cacheAt = -1, last = 0, timer: any = null, first = true, closed = false;
+    let seen = 0, cacheAt = -1, last = 0, timer: any = null, first = true, closed = false, epoch = epochs.get(id) || 0;
     const cache: string[] = []; // itens da última mensagem, como foram enviados
     const emit = () => {
       timer = null;
@@ -574,6 +592,7 @@ Responda em português, com uma lista numerada do mais grave para o menos. Cada 
       const c = convos.get(id);
       if (!c) return push({ gone: true });
       const { messages, ...meta } = c;
+      if ((epochs.get(id) || 0) !== epoch) { epoch = epochs.get(id) || 0; seen = 0; cacheAt = -1; first = true; }
       const msgs: unknown[] = [];
       for (let i = Math.max(0, seen - 1); i < messages.length; i++) {
         const { items, ...head } = messages[i];
@@ -606,7 +625,7 @@ Responda em português, com uma lista numerada do mais grave para o menos. Cada 
   }
 
   return {
-    create, send, review, watch,
+    create, send, review, watch, rewind,
     unqueue(id: string, index: number) { const c = convos.get(id); if (c?.queue?.[index]) { c.queue.splice(index, 1); if (!c.queue.length) delete c.queue; touch(c); } },
     get: (id: string) => convos.get(id),
     rename(id: string, title: string) { const c = convos.get(id); if (c) { c.title = title; c.titled = true; touch(c); } },

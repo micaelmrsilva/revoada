@@ -8,6 +8,9 @@ Um app para macOS que junta as suas contas de agentes de código (Claude Code, C
 
 - **Várias contas por provedor.** Cada conta é um perfil com configuração isolada. O login é o do CLI oficial; a Revoada não copia token nem fala com a API por conta própria.
 - **Conversa de verdade.** Mensagens, texto formatado, comandos com a saída, arquivos editados e o diff do que mudou, em vez da tela crua do terminal. A resposta chega ao vivo, e o que você escrever enquanto o agente trabalha entra na fila e segue sozinho quando ele termina. O terminal de cada agente continua disponível.
+- **Modelo e esforço por conversa.** Escolhidos no campo de pedido e passados ao CLI de cada provedor. Cada resposta mostra o modelo que respondeu.
+- **Uso à vista.** Um anel no campo abre a janela de contexto da conversa e os limites da conta, com a hora em que renovam.
+- **Copiar, editar e tentar de novo.** Editar uma mensagem sua volta a conversa àquele ponto; tentar de novo refaz a última resposta.
 - **Rodízio que leva a conversa.** Quando uma conta bate no limite, o pedido continua na próxima, com o histórico do que foi dito e feito. Vale também para trocar de agente à mão, até entre provedores.
 - **Permissão por ação.** No modo "Pergunta antes", o agente para e mostra o comando ou o arquivo antes de agir. Você permite, permite sempre naquela conversa, ou nega. O que só lê roda direto, sem perguntar.
 - **Consumo à vista.** Quanto cada conta já usou das janelas do provedor, e o rodízio começa pela mais folgada. Cada resposta mostra os tokens que gastou.
@@ -82,6 +85,8 @@ A Revoada é um servidor local em Bun com uma página, embrulhado numa janela na
 
 **Conversa ao vivo.** Com a conversa aberta, a página mantém uma conexão (`/api/convos/<id>/stream`, Server-Sent Events) e o servidor avisa a cada mudança. O primeiro aviso leva a conversa inteira; os seguintes, só os itens que mudaram. Se a conexão cai, o navegador religa e recebe tudo de novo. A página do celular ainda consulta de tempo em tempo.
 
+**Editar e tentar de novo.** A conversa é cortada na mensagem escolhida e ela é mandada outra vez. Nenhum CLI desfaz um trecho da própria sessão, então o agente começa uma sessão nova com o histórico do que ficou. Arquivos que a resposta descartada já tinha mexido continuam como estão.
+
 **Revisão cruzada.** O revisor recebe o pedido do usuário e o diff (numa cópia isolada, tudo desde que ela se separou da principal; arquivo novo fora do git entra inteiro) e roda em modo só leitura, numa sessão própria. A conta e a sessão nativa do autor não mudam. A escolha é outro provedor primeiro, porque outro modelo erra em lugares diferentes; sem outro pronto, outra conta do mesmo.
 
 **Cérebro.** `Agentes/` e `Projetos/` no cofre são espelho (a origem manda, a sincronização sobrescreve). `Revoada/` são notas próprias, onde você ou qualquer agente pode escrever. A busca é local, por palavra (BM25); com um modelo de embeddings no Ollama passa a considerar também o significado.
@@ -130,7 +135,7 @@ bun test
 
 `tests/flows.test.ts` sobe o servidor de verdade numa pasta de usuário descartável, com CLIs de mentira no `PATH` (`tests/stubs/`) que falam os mesmos protocolos dos reais. Cobre contas, conversa, rodízio, permissão, consumo, anexos, cérebro, cópias, importação, revisão cruzada e o acesso pelo celular (código, bloqueio e o que a porta não expõe). `tests/agenda.test.ts` cobre o relógio dos agendamentos sem esperar o relógio de verdade. `tests/safe.test.ts` cobre o que roda sem perguntar e `tests/md.test.ts` a formatação das respostas, incluindo texto que tenta virar marcação. Não toca na sua pasta de usuário nem gasta conta.
 
-`tests/tela.test.ts` abre o painel num Chrome sem janela e mede o que só existe na tela: nada passa da largura da conversa, o texto chega aos poucos sem consulta repetida, o comando não aparece duas vezes e a fila funciona pelo teclado. No macOS as medidas de largura são repetidas num WKWebView (`tests/webkit.swift`), que é o motor da janela do app. Sem Chrome instalado esse arquivo é pulado.
+`tests/modelo.test.ts` cobre modelo, esforço, janela de contexto e a volta da conversa a um ponto; `tests/pagina.test.ts` confere que o script de cada página compila (nome declarado duas vezes derruba o painel inteiro). `tests/tela.test.ts` abre o painel num Chrome sem janela e mede o que só existe na tela: nada passa da largura da conversa, o texto chega aos poucos sem consulta repetida, o comando não aparece duas vezes e a fila funciona pelo teclado. No macOS as medidas de largura são repetidas num WKWebView (`tests/webkit.swift`), que é o motor da janela do app. Sem Chrome instalado esse arquivo é pulado.
 
 O que os testes não cobrem: a janela nativa (barra de menus, vigília) e os CLIs reais. Se um provedor mudar o formato de saída, os testes continuam passando.
 

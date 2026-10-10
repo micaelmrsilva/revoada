@@ -954,6 +954,10 @@ const server = Bun.serve({
         }), { headers: { "content-type": "text/event-stream", "cache-control": "no-store" } });
       }
       if (req.method === "POST" && action === "stop") { convos.stop(c.id); return json({ ok: true }); }
+      if (req.method === "POST" && action === "rewind") {
+        await Promise.all(accounts.filter((a) => !statusCache.has(a.id)).map(refreshStatus));
+        try { convos.rewind(c, Number(body.index), typeof body.text === "string" ? body.text : undefined); return json({ ok: true }); } catch (e: any) { return fail(e.message); }
+      }
       if (req.method === "POST" && action === "review") {
         try { return json({ ok: true, reviewer: (await startReview(c, typeof body.target === "string" ? body.target : undefined, body.kind === "security" ? "security" : undefined)).id }); } catch (e: any) { return fail(e.message); }
       }
