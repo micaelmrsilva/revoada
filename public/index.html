@@ -128,10 +128,10 @@
   .box { background: var(--bg); border: 1px solid var(--line); border-radius: 20px; box-shadow: var(--shadow); padding: 14px 14px 10px 18px; }
   .box:focus-within { border-color: var(--faint); }
   .box textarea { border: 0; padding: 2px 0 8px; resize: none; font-size: 15.5px; line-height: 1.5; min-height: 48px; max-height: 240px; background: none; display: block; }
-  .box .row { display: flex; align-items: center; gap: 4px; min-width: 0; }
+  .box .row { display: flex; align-items: center; gap: 4px; min-width: 0; flex-wrap: wrap; row-gap: 2px; } /* sem espaço, as fichas descem pra outra linha em vez de sair do campo */
   .box .row .chip { flex: none; } .box .row #targetChip { flex: 0 1 auto; min-width: 0; } #targetChip .lb { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
   /* campo apertado: os botões ficam só com o ícone (o nome continua na dica) e a conta encolhe com reticências */
-  @container (max-width: 540px) { .box .row .chip:not(#targetChip) .lb { display: none; } #termChip { display: none !important; } .box { padding-left: 12px; } }
+  @container (max-width: 640px) { .box .row .chip:not(#targetChip) .lb { display: none; } #termChip { display: none !important; } .box { padding-left: 12px; } }
   .box .row .sp { flex: 1; }
   .send { width: 34px; height: 34px; border-radius: 50%; background: var(--ink); color: var(--on-ink); display: grid; place-items: center; margin-left: 6px; }
   .pop { position: absolute; background: var(--bg); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow); padding: 8px; z-index: 5; min-width: 300px; max-height: 420px; overflow-y: auto; display: none; }
@@ -156,6 +156,15 @@
   .xray .bar { display: flex; height: 8px; border-radius: 4px; overflow: hidden; background: var(--soft); } .xray .bar i { display: block; height: 100%; }
   .xray .k { display: flex; flex-wrap: wrap; gap: 4px 16px; color: var(--mute); } .xray .k span::before { content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 6px; background: var(--c); }
   .xray p { margin: 0; color: var(--mute); line-height: 1.5; } .who .xr { font-size: 12.5px; color: var(--mute); border-bottom: 1px dotted var(--faint); }
+  #popModel { right: 0; bottom: 54px; width: min(340px, 100%); padding: 12px; } #popModel.on { display: grid; gap: 10px; }
+  #popModel .seg { flex-wrap: wrap; } #popModel input { width: 100%; font-size: 13px; } #popModel small, #popUsage small { color: var(--mute); font-size: 12.5px; line-height: 1.45; }
+  #popUsage { right: 0; bottom: 54px; width: min(380px, 100%); padding: 16px; } #popUsage.on { display: grid; gap: 14px; }
+  #popUsage .u { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 12px; align-items: baseline; font-size: 13.5px; }
+  #popUsage .u small { text-align: right; } #popUsage .u .bar { grid-column: 1 / -1; height: 5px; border-radius: 3px; background: var(--soft); overflow: hidden; }
+  #popUsage .u .bar i { display: block; height: 100%; border-radius: 3px; background: var(--teal); } #popUsage .u.hot .bar i { background: var(--amber); } #popUsage .u.hit .bar i { background: var(--red); }
+  #popUsage hr { border: 0; border-top: 1px solid var(--line); margin: 0; }
+  #usageChip { padding: 4px 5px; } #usageChip svg { display: block; }
+  .who .mdl { font: 11.5px "Geist Mono", ui-monospace, monospace; color: var(--faint); }
 
   /* conversa */
   .thead { display: flex; align-items: center; gap: 16px; padding: 14px 24px; border-bottom: 1px solid var(--line); min-height: 60px; }
@@ -430,6 +439,8 @@
         <div class="days" id="schedDays" hidden></div>
         <small>Vira uma conversa nova na hora marcada, com a conta, a pasta e o modo que estão no campo. A Revoada precisa estar aberta e o Mac acordado; hora perdida por até 6 horas roda quando ele voltar.</small>
         <button class="btn" id="schedSave">Agendar</button></div>
+      <div class="pop" id="popModel"></div>
+      <div class="pop" id="popUsage"></div>
       <div class="strip">
         <button class="chip" id="dirChip"></button>
         <span class="notes" id="notes"></span>
@@ -447,7 +458,9 @@
           <button class="chip" id="supChip" title="Um agente divide o pedido em tarefas, você aprova o plano, cada tarefa roda numa cópia isolada em contas diferentes, outra conta revisa e no fim um agente junta tudo."></button>
           <button class="chip" id="schedChip" title="Rodar este pedido mais tarde ou todo dia" aria-label="Agendar"></button>
           <span class="sp"></span>
+          <button class="chip" id="modelChip" title="Modelo e esforço das próximas respostas"></button>
           <button class="chip" id="targetChip"></button>
+          <button class="chip" id="usageChip" aria-label="Uso: janela de contexto e limites da conta"></button>
           <button class="send" id="send" title="Enviar (Enter)" aria-label="Enviar"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg></button>
         </div>
       </div>
@@ -492,6 +505,14 @@ let useBrain = store.get("brain", "1") === "1", mode = store.get("mode", "ask"),
 // próxima mensagem provável: aparece no campo vazio quando o agente termina
 const suggestion = () => (view.type === "chat" && chat && !chat.working && chat.suggest && !$("prompt").value && !attached.length ? chat.suggest : "");
 let attached = []; // anexos esperando o próximo envio
+// modelo e esforço escolhidos, por provedor: { claude: { model: "opus", effort: "high" } }. Vazio = padrão da conta.
+const choice = JSON.parse(store.get("models", "{}"));
+const EFFORT_NAME = { low: "Baixo", medium: "Médio", high: "Alto", xhigh: "Muito alto", max: "Máximo" };
+// apelidos que o CLI do Claude resolve para o modelo mais novo de cada família; nos outros o nome é digitado
+const MODEL_ALIASES = { claude: [["fable", "Fable"], ["opus", "Opus"], ["sonnet", "Sonnet"], ["haiku", "Haiku"]] };
+const curProvider = () => { const ts = targets(); if (ts.length !== 1) return ""; const t = ts[0]; return t.startsWith("pool:") ? t.slice(5) : acc(t)?.provider || ""; };
+const curChoice = () => { const c = choice[curProvider()] || {}, p = prov(curProvider()); return { model: c.model || "", effort: p?.efforts?.includes(c.effort) ? c.effort : "" }; };
+const modelName = (provider, m) => (MODEL_ALIASES[provider] || []).find(([k]) => k === m)?.[1] || m;
 let isolate = null; // null = automático: isola quando a pasta já está ocupada ou vários vão editar ao mesmo tempo
 let repo = { cwd: "", repo: false, busy: false };
 let chat = null, chatTarget = null; // conversa aberta e pra quem vai a próxima mensagem
@@ -743,6 +764,11 @@ function paintComposer() {
   else if ($("notes").textContent.startsWith("sugestão")) $("notes").textContent = "";
   $("prompt").placeholder = sug ? sug : supervisor && !inChat ? "Descreva o trabalho inteiro: o supervisor divide em tarefas" : !inChat ? "Peça qualquer coisa" : chat?.waiting ? "Enter permite, Esc nega. Ou escreva a próxima mensagem" : busy ? "Escreva a próxima: entra quando o agente terminar" : "Responder";
   const ts = targets();
+  const pv = curProvider(), ch = curChoice();
+  $("modelChip").style.display = pv && !terminal ? "inline-flex" : "none";
+  $("modelChip").innerHTML = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="6" width="12" height="12" rx="2.5"/><path d="M9.5 2.5v3.5M14.5 2.5v3.5M9.5 18v3.5M14.5 18v3.5M2.5 9.5H6M2.5 14.5H6M18 9.5h3.5M18 14.5h3.5"/></svg><span class="lb">${esc([ch.model ? modelName(pv, ch.model) : "Modelo padrão", ch.effort && EFFORT_NAME[ch.effort]].filter(Boolean).join(" · "))}</span>`;
+  $("modelChip").classList.toggle("on", !!(ch.model || ch.effort));
+  paintUsageChip();
   const who = !ts.length ? "Nenhuma conta pronta" : ts.length === 1 ? targetName(ts[0]) : `${ts.length} contas em paralelo`;
   $("targetChip").innerHTML = `<span class="lb">${esc(who)}</span>${ICON.down}`; $("targetChip").title = who;
   $("brainChip").innerHTML = `${ICON.brain}<span class="lb">Cérebro</span>`; $("brainChip").classList.toggle("on", useBrain);
@@ -786,6 +812,63 @@ $("popTarget").onclick = (e) => {
   picked.clear(); cur.forEach((t) => picked.add(t)); store.set("targets", JSON.stringify([...picked]));
   paintTargets(); paintComposer();
 };
+// ---------- modelo e esforço ----------
+function paintModel() {
+  const pv = curProvider(), p = prov(pv), ch = curChoice(), known = MODEL_ALIASES[pv] || [];
+  const custom = ch.model && !known.some(([k]) => k === ch.model) ? ch.model : "";
+  $("popModel").innerHTML = `<span class="label">Modelo · ${esc(p?.name || "")}</span>
+    <div class="seg"><button class="${ch.model ? "" : "on"}" data-model="">Padrão da conta</button>${known.map(([k, n]) => `<button class="${ch.model === k ? "on" : ""}" data-model="${k}">${n}</button>`).join("")}</div>
+    <input type="text" id="modelFree" spellcheck="false" autocomplete="off" placeholder="${known.length ? "ou o nome completo de um modelo" : "nome do modelo, como o CLI aceita"}" value="${esc(custom)}" aria-label="Nome do modelo">
+    ${p?.efforts?.length ? `<span class="label" style="padding-top:6px">Esforço</span><div class="seg"><button class="${ch.effort ? "" : "on"}" data-effort="">Padrão</button>${p.efforts.map((e) => `<button class="${ch.effort === e ? "on" : ""}" data-effort="${e}">${EFFORT_NAME[e] || e}</button>`).join("")}</div>` : `<small>${esc(p?.name || "Este agente")} não tem ajuste de esforço pelo CLI.</small>`}
+    <small>Vale para as próximas respostas${view.type === "chat" ? " desta conversa" : ""}. Trocar de modelo no meio mantém a sessão do agente.</small>`;
+}
+function setChoice(patch) { const pv = curProvider(); if (!pv) return; choice[pv] = { ...curChoice(), ...patch }; store.set("models", JSON.stringify(choice)); paintModel(); paintComposer(); }
+$("modelChip").onclick = (e) => { e.stopPropagation(); paintModel(); togglePop("popModel"); };
+$("popModel").onclick = (e) => {
+  e.stopPropagation();
+  const m = e.target.closest("[data-model]"); if (m) return setChoice({ model: m.dataset.model });
+  const f = e.target.closest("[data-effort]"); if (f) return setChoice({ effort: f.dataset.effort });
+};
+$("popModel").addEventListener("change", (e) => { if (e.target.id === "modelFree") { const v = e.target.value.trim(); if (!v || /^[A-Za-z0-9][\w.:\/\[\]@-]{0,79}$/.test(v)) setChoice({ model: v }); else toast("Nome de modelo com caractere que o CLI não aceita."); } });
+$("popModel").addEventListener("keydown", (e) => { if (e.target.id === "modelFree" && e.key === "Enter") { e.target.blur(); closePops(); $("prompt").focus(); } });
+
+// ---------- uso: janela de contexto e limites da conta ----------
+const WINDOW_NAME = { five_hour: "Limite de sessão", seven_day: "Semanal · todos os modelos" };
+const windowName = (k) => WINDOW_NAME[k] || (k.startsWith("seven_day_") ? `Semanal · ${k.slice(10).replace(/_/g, " ").replace(/^./, (c) => c.toUpperCase())}` : k.replace(/_/g, " "));
+const resets = (t) => { const ms = t - Date.now(); if (ms <= 0) return ""; const min = Math.round(ms / 60000); return ms < 86_400_000 ? `Reinicia em ${min >= 60 ? `${Math.floor(min / 60)} h ` : ""}${min % 60} min` : `Reinicia ${new Date(t).toLocaleString("pt-BR", { weekday: "short", hour: "2-digit", minute: "2-digit" })}`; };
+// a conta cujo uso interessa agora: a que está respondendo a conversa, ou as que podem responder o próximo pedido
+function usageAccounts() {
+  if (view.type === "chat" && chat?.accountId && acc(chat.accountId)) return [acc(chat.accountId)];
+  return targets().flatMap((t) => (t.startsWith("pool:") ? S.accounts.filter((a) => a.provider === t.slice(5) && a.status.ok) : acc(t) ? [acc(t)] : []));
+}
+const chatCtx = () => (view.type === "chat" && chat ? chat.messages.findLast((m) => m.role === "assistant" && !m.review && m.ctx?.used)?.ctx : null);
+function paintUsageChip() {
+  const ctx = chatCtx(), accs = usageAccounts();
+  const limit = Math.max(0, ...accs.flatMap((a) => (a.limit ? [100] : (a.usage || []).map((u) => u.pct))));
+  // o anel mostra o que estiver mais perto de acabar: a janela da conversa ou o limite da conta
+  const pct = Math.min(100, Math.max(ctx?.window ? Math.round((ctx.used / ctx.window) * 100) : 0, limit));
+  const color = pct >= 90 ? "var(--red)" : pct >= 75 ? "var(--amber)" : "var(--teal)";
+  $("usageChip").style.display = accs.length || ctx ? "inline-flex" : "none";
+  $("usageChip").title = `Uso${ctx?.window ? ` · contexto ${Math.round((ctx.used / ctx.window) * 100)}%` : ""}${accs.length ? ` · limite mais usado ${limit}%` : ""}`;
+  $("usageChip").innerHTML = `<svg width="18" height="18" viewBox="0 0 20 20"><circle cx="10" cy="10" r="7" fill="none" stroke="var(--line)" stroke-width="2.5"/><circle cx="10" cy="10" r="7" fill="none" stroke="${color}" stroke-width="2.5" stroke-linecap="round" stroke-dasharray="${(pct / 100) * 43.98} 43.98" transform="rotate(-90 10 10)"/></svg>`;
+  if ($("popUsage").classList.contains("on")) paintUsage();
+}
+function paintUsage() {
+  const ctx = chatCtx(), accs = usageAccounts(), last = view.type === "chat" && chat ? chat.messages.findLast((m) => m.role === "assistant" && m.model) : null;
+  const row = (name, note, pct, cls = "") => `<div class="u ${cls || (pct >= 90 ? "hit" : pct >= 75 ? "hot" : "")}"><span>${esc(name)}</span><small class="num">${esc(note)}</small><span class="bar"><i style="width:${Math.min(100, pct)}%"></i></span></div>`;
+  const ctxHtml = view.type !== "chat" ? "" : ctx
+    ? (ctx.window ? row("Janela de contexto", `${tok(ctx.used)} / ${tok(ctx.window)} (${Math.round((ctx.used / ctx.window) * 100)}%)`, (ctx.used / ctx.window) * 100) : `<div class="u"><span>Janela de contexto</span><small class="num">${tok(ctx.used)} tokens</small></div>`)
+      + (last ? `<small>Respondendo com ${esc(last.model)}.</small>` : "") + "<hr>"
+    : `<small>O tamanho da conversa na janela de contexto aparece depois da primeira resposta. Hoje só o Claude informa.</small><hr>`;
+  const accHtml = accs.length ? accs.map((a) => `<span class="label">Limites de uso · ${esc(accName(a))}${a.status.detail ? ` · ${esc(a.status.detail.split(" · ")[0])}` : ""}</span>`
+    + (a.limit ? row("No limite", `volta ${hm(a.limit.until)}`, 100, "hit") : "")
+    + ((a.usage || []).length ? a.usage.map((u) => row(windowName(u.key), `${resets(u.resetsAt)}  ${u.pct}%`.trim(), u.pct)).join("") : a.limit ? "" : `<small>Esta conta ainda não informou consumo. Aparece depois da primeira resposta dela.</small>`)).join("")
+    : `<small>Nenhuma conta pronta para este pedido.</small>`;
+  $("popUsage").innerHTML = ctxHtml + accHtml;
+}
+$("usageChip").onclick = (e) => { e.stopPropagation(); paintUsage(); togglePop("popUsage"); };
+$("popUsage").onclick = (e) => e.stopPropagation();
+
 $("brainChip").onclick = () => { useBrain = !useBrain; store.set("brain", useBrain ? "1" : "0"); paintComposer(); peek(); };
 $("modeChip").onclick = () => { mode = { read: "ask", ask: "edit", edit: "full", full: "read" }[mode]; store.set("mode", mode); paintComposer(); toast(`${MODES[mode]}: ${MODE_HINT[mode]}`); };
 
@@ -938,7 +1021,7 @@ $("send").onclick = async () => {
   const clear = () => { $("prompt").value = ""; $("prompt").style.height = "auto"; $("notes").textContent = ""; attached = []; paintAtts(); };
   if (view.type === "chat") {
     if (!text.trim() && !attached.length) return;
-    await api(`convos/${chat.id}/send`, "POST", { text, target: ts[0], mode, brain: useBrain, attachments: attached });
+    await api(`convos/${chat.id}/send`, "POST", { text, target: ts[0], mode, brain: useBrain, attachments: attached, model: curChoice().model || null, effort: curChoice().effort || null });
     clear(); return loadChat(true);
   }
   if (supervisor) {
@@ -946,7 +1029,7 @@ $("send").onclick = async () => {
     const m = await api("missions", "POST", { prompt: text, cwd: cwd(), targets: ts });
     supervisor = false; clear(); await refresh(); return go({ type: "mission", id: m.id });
   }
-  const r = await api("chat", "POST", { prompt: text, targets: ts, cwd: cwd(), brain: useBrain, mode, terminal, isolate: willIsolate(ts), attachments: ts.length === 1 && !terminal ? attached : [] });
+  const r = await api("chat", "POST", { prompt: text, targets: ts, cwd: cwd(), brain: useBrain, mode, terminal, isolate: willIsolate(ts), attachments: ts.length === 1 && !terminal ? attached : [], model: curChoice().model || null, effort: curChoice().effort || null });
   isolate = null; repo.cwd = "";
   clear(); await refresh(); go({ type: r.kind, id: r.id });
 };
@@ -1013,7 +1096,7 @@ function msgParts(m, i) {
   // o cartão de permissão já mostra o comando: a linha dele some enquanto espera, e depois de permitido fica só a linha
   const same = (ask, it) => (it.kind === "cmd" && it.command === ask.detail) || (it.kind === "files" && it.changes.some((c) => c.path === ask.detail));
   const pending = items.filter((x) => x.kind === "ask" && x.state === "pending");
-  const parts = [["who", `<div class="who">${m.review ? `<span class="tag ok">${m.reviewKind === "security" ? "Auditoria de segurança" : "Revisão"}</span>` : ""}<b>${esc(accName(acc(m.accountId)))}</b>${m.state === "working" ? "" : `<span class="num">${dur(took)}</span>`}${m.tokens ? `<button class="xr num" data-xray="${i}" title="Ver o que pesou nesta resposta">${tok(m.tokens.in + m.tokens.out + m.tokens.cache)} tokens</button>` : ""}${m.brain?.length ? `<span class="b" title="${esc(m.brain.join("\n"))}">${plural(m.brain.length, "nota", "notas")} do cérebro</span>` : ""}${m.state === "stopped" ? "<span>interrompido</span>" : ""}</div>`]];
+  const parts = [["who", `<div class="who">${m.review ? `<span class="tag ok">${m.reviewKind === "security" ? "Auditoria de segurança" : "Revisão"}</span>` : ""}<b>${esc(accName(acc(m.accountId)))}</b>${m.state === "working" ? "" : `<span class="num">${dur(took)}</span>`}${m.model ? `<span class="mdl">${esc(m.model.replace(/^claude-/, "").replace(/\[.*\]$/, ""))}</span>` : ""}${m.tokens ? `<button class="xr num" data-xray="${i}" title="Ver o que pesou nesta resposta">${tok(m.tokens.in + m.tokens.out + m.tokens.cache)} tokens</button>` : ""}${m.brain?.length ? `<span class="b" title="${esc(m.brain.join("\n"))}">${plural(m.brain.length, "nota", "notas")} do cérebro</span>` : ""}${m.state === "stopped" ? "<span>interrompido</span>" : ""}</div>`]];
   if (m.tokens && openActs.has(`x:${i}`)) parts.push(["xray", xrayHtml(m)]);
   // raciocínio, comandos, arquivos e ferramentas seguidos viram um grupo só
   let group = [];
@@ -1138,6 +1221,7 @@ function openLive(id) {
     const first = !chat || chat.id !== id;
     chat = applyStream(first ? null : chat, ev);
     if (first || !chatTarget) chatTarget = chat.target;
+    if (first && (chat.model || chat.effort) && chat.provider) { choice[chat.provider] = { model: chat.model || "", effort: chat.effort || "" }; store.set("models", JSON.stringify(choice)); } 
     renderChat();
     if (first) $("chatScroll").scrollTop = $("chatScroll").scrollHeight;
   };
@@ -1149,7 +1233,7 @@ async function loadChat(force) {
   if (live.es?.readyState === 1 && live.id === view.id) return; // a conversa ao vivo já entrega tudo
   const id = view.id, r = await api(`convos/${id}${!force && chat ? `?rev=${chat.rev}` : ""}`).catch(() => null);
   if (!r || view.type !== "chat" || view.id !== id) return;
-  if (!r.same) { const first = !chat || chat.id !== r.id; chat = r; if (first || !chatTarget) chatTarget = r.target; renderChat(); if (first) $("chatScroll").scrollTop = $("chatScroll").scrollHeight; }
+  if (!r.same) { const first = !chat || chat.id !== r.id; chat = r; if (first || !chatTarget) chatTarget = r.target; if (first && (chat.model || chat.effort) && chat.provider) { choice[chat.provider] = { model: chat.model || "", effort: chat.effort || "" }; store.set("models", JSON.stringify(choice)); } renderChat(); if (first) $("chatScroll").scrollTop = $("chatScroll").scrollHeight; }
   if (chat.working || live.es?.readyState !== 1) loadChat.t = setTimeout(loadChat, chat.working ? 300 : 2000);
 }
 

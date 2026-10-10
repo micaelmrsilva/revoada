@@ -78,6 +78,7 @@ describe.skipIf(!CHROME)("tela", () => {
       groups: [...m.querySelectorAll(".acts")].map((d) => [d.querySelector(".lbl").textContent, d.open]) };`);
     expect(seen).toEqual({ rows: 4, cols: 2, raw: false, nested: 1, title: true, code: true, groups: [["Rodou 1 comando, leu 1 arquivo", false]] });
     // aberto, o grupo mostra o comando comprido numa linha só, cortado com reticências, sem empurrar a coluna
+    console.log("DEBUG", await page(`return { view: JSON.stringify(view), msgs: document.querySelector("#msgs").innerHTML.length, acts: document.querySelectorAll("#msgs .acts").length, html: document.querySelector("#msgs").innerHTML.slice(0, 300), err: window.__err || null }`));
     await page(`document.querySelector("#msgs .acts > summary").click();`);
     await until(`document.querySelector("#msgs .acts").open && document.querySelector("#msgs .acts .what")`);
     expect(await page(OVERFLOW)).toEqual({ over: 0, scroll: 0, col: 760 });
@@ -187,7 +188,8 @@ describe.skipIf(!CHROME)("tela", () => {
     await page(`document.querySelector('#schedKind [data-k="daily"]').click(); document.querySelector('#schedDays [data-d="1"]').click(); document.querySelector("#schedSave").click();`);
     const list = await env.until(async () => { const l = await env.api("schedules"); return l.length === 1 && l; });
     expect([list[0].prompt, list[0].kind, list[0].time, list[0].days, list[0].enabled]).toEqual(["relatório de vendas da semana", "daily", "03:00", [1], true]);
-    expect(await page(`return [document.querySelector("#prompt").value, document.querySelector("#popSched").classList.contains("on")]`)).toEqual(["", false]);
+    // o servidor já tem o agendamento antes de a página receber a resposta: espera ela reagir
+    await until(`document.querySelector("#prompt").value === "" && !document.querySelector("#popSched").classList.contains("on")`);
     await page(`await refresh(); go({ type: "sched" });`);
     await until(`document.querySelector("#schedList .r")`);
     expect(await page(`return [document.querySelector("#schedLead").textContent, document.querySelector("#schedList .r b").textContent, document.querySelector("#schedCount").textContent, document.querySelector("#schedList small").textContent.includes("todo dia às 03:00 (seg)")]`))

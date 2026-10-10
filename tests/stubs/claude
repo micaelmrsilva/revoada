@@ -4,7 +4,10 @@
 import { writeFileSync } from "fs";
 const a = process.argv.slice(2), out = (o: unknown) => console.log(JSON.stringify(o));
 if (a[0] === "auth") { out({ loggedIn: true, email: "teste@exemplo.dev", subscriptionType: "max", orgName: "teste@exemplo.dev" }); process.exit(0); }
-if (a.includes("--model")) { console.log(a[1].includes("próxima mensagem") ? "roda os testes agora" : "Título de teste"); process.exit(0); }
+// pedido avulso (título): `-p <texto> --model haiku`. A conversa também pode trazer --model, mas aí o -p vem sem texto.
+if (a[0] === "-p" && a[1] && !a[1].startsWith("--") && a.includes("--model")) { console.log(a[1].includes("próxima mensagem") ? "roda os testes agora" : "Título de teste"); process.exit(0); }
+const flag = (name: string) => (a.includes(name) ? a[a.indexOf(name) + 1] : "padrao");
+const MODEL = `claude-${flag("--model")}-teste`;
 const lines = console[Symbol.asyncIterator]();
 const first = JSON.parse((await lines.next()).value);
 const blocks: any[] = first.message.content;
@@ -36,7 +39,7 @@ const ANSWER = `Quase. Às 14:42 oito contas estão criadas e a última (Oka) es
 ./criar-contas.sh --rodada r9 --so-o-que-falta
 \`\`\``;
 const nap = (ms: number) => new Promise((r) => setTimeout(r, ms));
-out({ type: "system", subtype: "init", session_id: "s-claude" });
+out({ type: "system", subtype: "init", session_id: "s-claude", model: MODEL });
 out({ type: "rate_limit_event", rate_limit_info: { unifiedWindows: { five_hour: { utilization: 0.42, resetsAt: now + 3600 }, seven_day: { utilization: 0.1, resetsAt: now + 86400 } } } });
 if (a.includes("--permission-prompt-tool")) {
   // "SO-LEITURA" no pedido: o agente quer só listar; o resto quer criar arquivo
@@ -58,11 +61,11 @@ if (a.includes("--permission-prompt-tool")) {
   out({ type: "user", message: { content: [{ type: "tool_result", tool_use_id: "dt2", content: "..." }] } });
   out({ type: "stream_event", event: { type: "message_start", message: { id: "d3" } } });
   for (let i = 0; i < ANSWER.length; i += 24) { out({ type: "stream_event", event: { type: "content_block_delta", index: 0, delta: { type: "text_delta", text: ANSWER.slice(i, i + 24) } } }); await nap(25); }
-  out({ type: "assistant", message: { id: "d3", content: [{ type: "text", text: ANSWER }] } });
+  out({ type: "assistant", message: { id: "d3", content: [{ type: "text", text: ANSWER }], usage: { input_tokens: 900, cache_read_input_tokens: 520000, cache_creation_input_tokens: 14000, output_tokens: 1000 } } });
 } else {
   out({ type: "stream_event", event: { type: "message_start", message: { id: "m1" } } });
   for (const t of ["olá ", "mundo"]) out({ type: "stream_event", event: { type: "content_block_delta", index: 0, delta: { type: "text_delta", text: t } } });
-  out({ type: "assistant", message: { id: "m1", content: [{ type: "text", text: `olá mundo; imagens=${blocks.filter((b) => b.type === "image").length}; retomada=${a.includes("--resume")}; revisor=${said.includes("<diff>") && said.includes("novo.txt")}; leitura=${!a.includes("--permission-mode") && !a.includes("--dangerously-skip-permissions")}; auditoria=${said.includes("auditor de segurança")}; mcp=${a.includes("--mcp-config") ? a[a.indexOf("--mcp-config") + 1] : "nao"}` }] } });
+  out({ type: "assistant", message: { id: "m1", content: [{ type: "text", text: `olá mundo; imagens=${blocks.filter((b) => b.type === "image").length}; retomada=${a.includes("--resume")}; modelo=${flag("--model")}; esforco=${flag("--effort")}; revisor=${said.includes("<diff>") && said.includes("novo.txt")}; leitura=${!a.includes("--permission-mode") && !a.includes("--dangerously-skip-permissions")}; auditoria=${said.includes("auditor de segurança")}; mcp=${a.includes("--mcp-config") ? a[a.indexOf("--mcp-config") + 1] : "nao"}` }], usage: { input_tokens: 1000, cache_read_input_tokens: 50000, cache_creation_input_tokens: 2000, output_tokens: 900 } } });
 }
-out({ type: "result", subtype: "success", is_error: false, session_id: "s-claude", total_cost_usd: 0.05, usage: { input_tokens: 100, cache_creation_input_tokens: 20, cache_read_input_tokens: 3000, output_tokens: 40 } });
+out({ type: "result", subtype: "success", is_error: false, session_id: "s-claude", total_cost_usd: 0.05, modelUsage: { [MODEL]: { contextWindow: RICH ? 1_000_000 : 200_000 }, "claude-auxiliar": { contextWindow: 64_000 } }, usage: { input_tokens: 100, cache_creation_input_tokens: 20, cache_read_input_tokens: 3000, output_tokens: 40 } });
 process.exit(0);
