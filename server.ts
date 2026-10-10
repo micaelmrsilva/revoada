@@ -10,6 +10,8 @@ import { createHistory } from "./history";
 import { createMissions, PLAN_PROMPT } from "./missions";
 import { createRemote } from "./remote";
 import { createSchedules } from "./schedule";
+import { createBoard } from "./board";
+import { routable } from "./route";
 import { createTools } from "./tools";
 import { readOnlyTool } from "./safe";
 
@@ -194,7 +196,7 @@ const stripAnsi = (s: string) => s
 // ---------- limite e rodízio ----------
 type Limit = { until: number; reason: string; at: number };
 let limits: Record<string, Limit> = readJson(LIMITS_FILE) || {};
-const settings: { rotate: boolean; teach: boolean; onboarded: boolean; autoClean: boolean; importChats: boolean; keepAwake: boolean; lidAwake: boolean; lidFreeze: boolean; autoReview: boolean; autoRead: boolean; suggest: boolean; shareTools: boolean; tidyBrain: boolean; remote: boolean; remoteSend: boolean } = { autoRead: true, suggest: true, shareTools: false, tidyBrain: false, rotate: true, teach: false, onboarded: false, autoClean: false, importChats: false, keepAwake: true, lidAwake: false, lidFreeze: false, autoReview: false, remote: false, remoteSend: false, ...(readJson(SETTINGS_FILE) || {}) };
+const settings: { rotate: boolean; teach: boolean; onboarded: boolean; autoClean: boolean; importChats: boolean; keepAwake: boolean; lidAwake: boolean; lidFreeze: boolean; autoReview: boolean; autoRead: boolean; suggest: boolean; shareTools: boolean; tidyBrain: boolean; remote: boolean; remoteSend: boolean ; sound: boolean } = { sound: true, autoRead: true, suggest: true, shareTools: false, tidyBrain: false, rotate: true, teach: false, onboarded: false, autoClean: false, importChats: false, keepAwake: true, lidAwake: false, lidFreeze: false, autoReview: false, remote: false, remoteSend: false, ...(readJson(SETTINGS_FILE) || {}) };
 // o que a janela nativa informa sobre a vigília (só existe no app desktop)
 let vigil: Record<string, unknown> | null = null;
 // consumo de cada conta nas janelas do provedor (5h, 7 dias), lido do que o próprio CLI informa
@@ -541,6 +543,8 @@ async function startReview(c: NonNullable<ReturnType<typeof convos.get>>, target
 const accName = (a?: { provider: string; label: string }) => (a ? `${PROVIDERS[a.provider].name} · ${a.label}` : "conta removida");
 const ATTACH = join(ROOT, "attachments");
 const TITLES = join(ROOT, "titles"); // pasta neutra onde roda o pedido de título
+const PLANS = join(ROOT, "plans"); // planos em arquivo das tarefas longas
+mkdirSync(PLANS, { recursive: true });
 mkdirSync(ATTACH, { recursive: true });
 mkdirSync(TITLES, { recursive: true });
 // título curto pela conta Claude que estiver pronta, no modelo mais barato; sem Claude, fica a primeira linha
@@ -573,7 +577,7 @@ async function makeSuggestion(c: { messages: any[] }): Promise<string | null> {
   return (await proc.exited) === 0 && line.length > 2 && line.length <= 120 && !/^[-–—]+$/.test(line) ? line : null;
 }
 const convos = createConvos({
-  dir: join(ROOT, "convos"), vault: brain.vault, attachDir: ATTACH,
+  dir: join(ROOT, "convos"), vault: brain.vault, attachDir: ATTACH, planDir: PLANS,
   onUsage: (a, w) => setUsage(a.id, w),
   afterTurn: (a, sid) => { if (a.provider === "codex") readCodexUsage(a as Account, sid); },
   makeTitle,
@@ -643,6 +647,20 @@ async function openChat(o: { prompt: string; target: string; cwd: string; mode: 
 const schedules = createSchedules({
   file: join(ROOT, "schedules.json"),
   run: async (s) => (await openChat({ prompt: s.prompt, target: s.target, cwd: s.cwd, mode: asMode(s.mode), brain: s.brain, isolate: s.isolate })).id,
+});
+
+// ---------- quadro de tarefas ----------
+const convoView = (id: string) => {
+  const c = convos.get(id);
+  if (!c) return null;
+  return { working: c.working, waiting: !!c.waiting, lastState: c.messages.at(-1)?.state, touchedFiles: c.messages.some((x) => !x.review && x.items?.some((i) => i.kind === "files")) };
+};
+const board = createBoard({
+  file: join(ROOT, "board.json"),
+  // cada tarefa na sua cópia do repositório, quando a pasta é um repositório; fora disso, na própria pasta
+  launch: async (card) => (await openChat({ prompt: card.prompt, target: card.target, cwd: card.cwd, mode: "edit", brain: true, isolate: !!(await repoInfo(card.cwd)), title: card.title })).id,
+  convo: convoView,
+  review: async (id) => { const c = convos.get(id); if (c) await startReview(c); },
 });
 
 // ---------- supervisor ----------
@@ -808,7 +826,7 @@ async function state(refresh: boolean) {
   if (refresh || stale.some((a) => !statusCache.has(a.id))) await Promise.all(pending);
   return {
     home: HOME, projects: PROJECTS,
-    providers: Object.entries(PROVIDERS).map(([id, p]) => ({ id, name: p.name, installed: !!binPath(id), efforts: EFFORTS[id] || [] })),
+    providers: Object.entries(PROVIDERS).map(([id, p]) => ({ id, name: p.name, installed: !!binPath(id), efforts: EFFORTS[id] || [], auto: routable(id) })),
     accounts: accounts.map((a) => ({
       id: a.id, provider: a.provider, label: a.label, isolated: !!a.home, envKeys: Object.keys(a.env || {}),
       status: statusCache.get(a.id) || { ok: false, detail: "verificando" },
@@ -820,6 +838,7 @@ async function state(refresh: boolean) {
     brain: brain.info(),
     clones: clones.summary(), cleaned, vigil, remote: { on: remote.on, port: REMOTE_PORT },
     schedules: schedules.list().length,
+    board: board.list().filter((c) => c.state !== "done").length,
     missions: missions.list().map((m) => ({ id: m.id, title: m.prompt.split("\n")[0].slice(0, 80), cwd: m.cwd, at: m.at, state: m.state })),
     convos: convos.list(),
     history: settings.importChats ? history.list() : [],
@@ -894,7 +913,7 @@ const server = Bun.serve({
         if (!prompt && !asAttachments(body.attachments).length) return fail("escreva o pedido");
         let wt: (Worktree & { cwd: string }) | undefined;
         if (body.isolate) { try { wt = await makeWorktree(cwd, prompt); } catch (e: any) { return fail(e.message); } }
-        return json({ kind: "chat", id: convos.create({ prompt, target: targets[0], cwd: wt?.cwd || cwd, mode: asMode(body.mode), brain: body.brain !== false, worktree: wt && { main: wt.main, path: wt.path, branch: wt.branch }, attachments: asAttachments(body.attachments), model: asModel(body.model), effort: asEffort(body.effort) }).id });
+        return json({ kind: "chat", id: convos.create({ prompt, target: targets[0], cwd: wt?.cwd || cwd, mode: asMode(body.mode), brain: body.brain !== false, worktree: wt && { main: wt.main, path: wt.path, branch: wt.branch }, attachments: asAttachments(body.attachments), model: asModel(body.model), effort: asEffort(body.effort), plan: body.plan === true }).id });
       }
       const ctx = prompt && body.brain !== false ? await brain.context(prompt, cwd.split("/").pop()) : null;
       if (targets.length > 1) {
@@ -954,6 +973,10 @@ const server = Bun.serve({
         }), { headers: { "content-type": "text/event-stream", "cache-control": "no-store" } });
       }
       if (req.method === "POST" && action === "stop") { convos.stop(c.id); return json({ ok: true }); }
+      if (action === "plan") {
+        if (req.method === "POST") convos.setPlan(c.id, !!body.on);
+        return json(convos.plan(c.id));
+      }
       if (req.method === "POST" && action === "rewind") {
         await Promise.all(accounts.filter((a) => !statusCache.has(a.id)).map(refreshStatus));
         try { convos.rewind(c, Number(body.index), typeof body.text === "string" ? body.text : undefined); return json({ ok: true }); } catch (e: any) { return fail(e.message); }
@@ -994,6 +1017,31 @@ const server = Bun.serve({
     }
 
     if (resource === "vigil" && req.method === "POST") { vigil = body; return json({ ok: true }); }
+
+    if (resource === "board") {
+      try {
+        if (req.method === "POST" && !id) {
+          const prompt = String(body.prompt || "").trim(), cwd = validCwd(body.cwd);
+          if (!prompt) return fail("escreva a tarefa");
+          if (!cwd) return fail("pasta não existe");
+          if (!isTarget(body.target)) return fail("escolha quem vai fazer a tarefa");
+          // várias de uma vez: uma tarefa por linha
+          const lines = body.split ? prompt.split("\n").map((l: string) => l.replace(/^\s*(?:[-*]|\d+[.)])\s+/, "").trim()).filter(Boolean).slice(0, 30) : [prompt];
+          return json(lines.map((p: string) => board.add({ prompt: p, cwd, target: body.target })));
+        }
+        if (req.method === "POST" && action === "start") return json(await board.start(id));
+        if (req.method === "POST" && action === "move") return json(await board.move(id, String(body.to)));
+        if (req.method === "DELETE") { board.remove(id); return json({ ok: true }); }
+      } catch (e: any) { return fail(e.message); }
+      return json(board.list());
+    }
+
+    // busca no conteúdo: as conversas da Revoada e, se estiverem ligadas, as dos outros programas
+    if (resource === "search") {
+      const q = (url.searchParams.get("q") || "").trim();
+      if (q.length < 3) return json({ chats: [], history: [] });
+      return json({ chats: convos.search(q), history: settings.importChats ? await history.search(q) : [] });
+    }
 
     if (resource === "schedules") {
       try {
@@ -1095,7 +1143,7 @@ const server = Bun.serve({
       if (typeof body.rotate === "boolean") settings.rotate = body.rotate;
       if (typeof body.onboarded === "boolean") settings.onboarded = body.onboarded;
       if (typeof body.importChats === "boolean") settings.importChats = body.importChats;
-      for (const k of ["keepAwake", "lidAwake", "lidFreeze", "autoReview", "autoRead", "suggest", "tidyBrain"] as const) if (typeof body[k] === "boolean") settings[k] = body[k];
+      for (const k of ["keepAwake", "lidAwake", "lidFreeze", "autoReview", "autoRead", "suggest", "tidyBrain", "sound"] as const) if (typeof body[k] === "boolean") settings[k] = body[k];
       if (typeof body.autoClean === "boolean") { settings.autoClean = body.autoClean; if (body.autoClean) setTimeout(autoClean, 500); }
       if (typeof body.teach === "boolean") { settings.teach = body.teach; teachAll(body.teach); }
       writeFileSync(SETTINGS_FILE, JSON.stringify(settings));
@@ -1209,6 +1257,7 @@ function shutdown() {
   remote.stop();
   schedules.stop();
   missions.stop();
+  board.stop();
   for (const s of sessions.values()) if (s.alive) { s.alive = false; archive(s); s.proc.kill(); }
   process.exit(0);
 }

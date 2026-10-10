@@ -12,6 +12,15 @@ const lines = console[Symbol.asyncIterator]();
 const first = JSON.parse((await lines.next()).value);
 const blocks: any[] = first.message.content;
 const said = blocks.filter((b) => b.type === "text").map((b) => b.text).join("\n");
+// plano em arquivo: as instruções chegam pelo contexto (sessão nova) ou na frente do pedido (sessão retomada).
+// O agente de mentira escreve o plano na primeira vez e marca um passo a cada resposta seguinte.
+const sys = a.includes("--append-system-prompt") ? a[a.indexOf("--append-system-prompt") + 1] : "";
+const planAt = (sys + "\n" + said).match(/Mantenha um plano no arquivo (\S+\.md)/)?.[1];
+if (planAt) {
+  const { existsSync, readFileSync } = await import("fs");
+  const cur = existsSync(planAt) ? readFileSync(planAt, "utf8") : "";
+  writeFileSync(planAt, cur ? cur.replace("- [ ] ", "- [x] ") : "# Objetivo\nentregar a tarefa\n## Passos\n- [ ] primeiro\n- [ ] segundo\n- [ ] terceiro\n## Onde parei\nno começo\n");
+}
 const now = Math.floor(Date.now() / 1000);
 // "DEMO-RICA" no pedido: resposta com cara de trabalho de verdade (comando comprido, leitura, tabela,
 // lista), chegando aos poucos. Serve ao `bun run demo` e ao teste de tela.
@@ -65,7 +74,7 @@ if (a.includes("--permission-prompt-tool")) {
 } else {
   out({ type: "stream_event", event: { type: "message_start", message: { id: "m1" } } });
   for (const t of ["olá ", "mundo"]) out({ type: "stream_event", event: { type: "content_block_delta", index: 0, delta: { type: "text_delta", text: t } } });
-  out({ type: "assistant", message: { id: "m1", content: [{ type: "text", text: `olá mundo; imagens=${blocks.filter((b) => b.type === "image").length}; retomada=${a.includes("--resume")}; modelo=${flag("--model")}; esforco=${flag("--effort")}; revisor=${said.includes("<diff>") && said.includes("novo.txt")}; leitura=${!a.includes("--permission-mode") && !a.includes("--dangerously-skip-permissions")}; auditoria=${said.includes("auditor de segurança")}; mcp=${a.includes("--mcp-config") ? a[a.indexOf("--mcp-config") + 1] : "nao"}` }], usage: { input_tokens: 1000, cache_read_input_tokens: 50000, cache_creation_input_tokens: 2000, output_tokens: 900 } } });
+  out({ type: "assistant", message: { id: "m1", content: [{ type: "text", text: `olá mundo; imagens=${blocks.filter((b) => b.type === "image").length}; retomada=${a.includes("--resume")}; modelo=${flag("--model")}; esforco=${flag("--effort")}; plano=${planAt ? "instruido" : "nao"}; viu-plano=${(sys + said).includes("Plano como está agora")}; revisor=${said.includes("<diff>") && said.includes("novo.txt")}; leitura=${!a.includes("--permission-mode") && !a.includes("--dangerously-skip-permissions")}; auditoria=${said.includes("auditor de segurança")}; mcp=${a.includes("--mcp-config") ? a[a.indexOf("--mcp-config") + 1] : "nao"}` }], usage: { input_tokens: 1000, cache_read_input_tokens: 50000, cache_creation_input_tokens: 2000, output_tokens: 900 } } });
 }
 out({ type: "result", subtype: "success", is_error: false, session_id: "s-claude", total_cost_usd: 0.05, modelUsage: { [MODEL]: { contextWindow: RICH ? 1_000_000 : 200_000 }, "claude-auxiliar": { contextWindow: 64_000 } }, usage: { input_tokens: 100, cache_creation_input_tokens: 20, cache_read_input_tokens: 3000, output_tokens: 40 } });
 process.exit(0);

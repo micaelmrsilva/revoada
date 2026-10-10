@@ -254,6 +254,23 @@
   @media (prefers-reduced-motion: reduce) { .working .dots i { animation: none; opacity: .7; } }
   .working .now { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } .working .num { flex: none; color: var(--faint); }
   .working.ask { color: var(--amber); }
+  /* quadro de tarefas: quatro colunas, cartões arrastáveis */
+  .boardadd { display: flex; gap: 10px; align-items: flex-end; padding: 14px 24px; border-bottom: 1px solid var(--line); }
+  .boardadd textarea { flex: 1; resize: none; min-height: 40px; max-height: 160px; }
+  .board { flex: 1; min-height: 0; display: grid; grid-template-columns: repeat(4, minmax(200px, 1fr)); gap: 14px; padding: 18px 24px 24px; overflow: auto; }
+  .board .col { display: flex; flex-direction: column; gap: 8px; min-width: 0; border-radius: 14px; padding: 4px; }
+  .board .col.over { background: var(--soft); }
+  .board .col > h4 { margin: 4px 6px 4px; font: 10.5px "Geist Mono", ui-monospace, monospace; letter-spacing: .14em; text-transform: uppercase; color: var(--mute); font-weight: 400; display: flex; justify-content: space-between; }
+  .board .card { border: 1px solid var(--line); border-radius: 12px; padding: 11px 12px; background: var(--bg); display: grid; gap: 6px; cursor: grab; min-width: 0; }
+  .board .card.drag { opacity: .4; } .board .card b { font-weight: 550; overflow-wrap: anywhere; } .board .card small { color: var(--mute); font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .board .card .st { font-size: 12.5px; color: var(--mute); display: flex; align-items: center; gap: 7px; } .board .card .st.run { color: var(--teal); } .board .card .st.wait { color: var(--amber); } .board .card .st.bad { color: var(--red); }
+  .board .card .st i { width: 6px; height: 6px; border-radius: 50%; background: currentColor; animation: pulse 1.1s ease-in-out infinite; }
+  .board .card .do { display: flex; gap: 12px; flex-wrap: wrap; font-size: 12.5px; } .board .empty { color: var(--faint); font-size: 13px; padding: 10px 8px; }
+  #planDlg { width: min(720px, 92vw); max-height: 86vh; padding: 0; display: none; flex-direction: column; } #planDlg[open] { display: flex; }
+  #planDlg header { padding: 18px 22px 12px; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; align-items: baseline; gap: 16px; } #planDlg h2 { margin: 0; font-size: 17px; } #planDlg header small { color: var(--mute); }
+  #planBody { padding: 18px 22px 22px; overflow-y: auto; }
+  /* resultado da busca no conteúdo */
+  .item.hit { display: grid; gap: 2px; padding: 8px 10px; } .item.hit .t { font-weight: 500; } .item.hit .sn { color: var(--mute); font-size: 12.5px; line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; white-space: normal; } .item.hit mark { background: none; color: var(--teal); font-weight: 600; }
   /* ações da mensagem: aparecem ao passar o mouse; na última resposta ficam sempre à vista */
   .mact { display: flex; gap: 2px; opacity: 0; transition: opacity .12s; }
   .m:hover .mact, .m:focus-within .mact, .m:last-child .mact { opacity: 1; }
@@ -366,6 +383,7 @@
     <button class="item" data-go="brain"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="2.5"/><circle cx="18" cy="8" r="2.5"/><circle cx="10" cy="18" r="2.5"/><path d="M8.2 7 15.6 7.8M7 8.3l2.3 7.3M16.5 10l-5 6.2"/></svg><span class="t">Cérebro</span></button>
     <button class="item" data-go="accounts"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0M16 4.6a3.5 3.5 0 0 1 0 6.8M18 14.2a6.5 6.5 0 0 1 3.5 5.8"/></svg><span class="t">Contas</span><span class="label" id="navAcc" style="letter-spacing:0"></span><span id="navDot"></span></button>
     <button class="item" data-go="clones"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="8" width="12" height="12" rx="2.5"/><path d="M16 8V6.5A2.5 2.5 0 0 0 13.5 4h-7A2.5 2.5 0 0 0 4 6.5v7A2.5 2.5 0 0 0 6.5 16H8"/></svg><span class="t">Clones</span><span class="label num" id="navClones" style="letter-spacing:0"></span></button>
+    <button class="item" data-go="board"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="4" width="5" height="16" rx="1.5"/><rect x="9.5" y="4" width="5" height="10" rx="1.5"/><rect x="15.5" y="4" width="5" height="13" rx="1.5"/></svg><span class="t">Quadro</span><span class="n" id="boardCount"></span></button>
     <button class="item" data-go="sched"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg><span class="t">Agendados</span><span class="n num" id="schedCount"></span></button>
     <button class="item" id="settingsBtn"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2"/><circle cx="8" cy="17" r="2"/></svg><span class="t">Ajustes</span></button>
   </div>
@@ -430,6 +448,11 @@
         <textarea id="noteText" placeholder="O que todo agente desta máquina deve saber" aria-label="Texto da nota"></textarea>
         <div><button class="btn" id="noteSave">Guardar nota</button></div></div></div>
   </div></section>
+  <section class="view" id="v-board">
+    <div class="thead"><div class="tt"><h2>Quadro</h2><p id="boardSub"></p></div><span style="display:flex;gap:18px;align-items:center"><button class="link" id="boardAll" title="Começa todas as tarefas da primeira coluna, cada uma com o seu agente">Começar todas</button></span></div>
+    <div class="boardadd"><textarea id="boardText" rows="1" placeholder="Nova tarefa. Várias de uma vez: uma por linha" aria-label="Nova tarefa"></textarea><button class="btn" id="boardAdd">Adicionar</button></div>
+    <div class="board" id="board"></div>
+  </section>
   <section class="view page" id="v-sched"><div class="wrap">
     <div class="ptitle"><div><h1 id="schedLead"></h1><p>Pedidos que rodam sozinhos na hora marcada. Para criar um, escreva o pedido na tela inicial e use o relógio do campo.</p></div></div>
     <div class="sec"><span class="label">Agendados</span><div class="rows" id="schedList"></div></div>
@@ -492,6 +515,7 @@
   <div class="end"><button class="link" id="dDelete" style="color:var(--red);border-color:var(--red)">Remover conta</button>
     <span><button class="link" id="dCancel">Cancelar</button><button class="btn" id="dSave">Salvar</button></span></div>
 </dialog>
+<dialog id="planDlg"><header><div><h2>Plano da tarefa</h2><small id="planSub"></small></div><button class="link" id="planClose">Fechar</button></header><div id="planBody"></div></dialog>
 <dialog id="diffDlg"><header><div><h2 id="diffTitle"></h2><small id="diffSub"></small></div><button class="link" id="diffClose">Fechar</button></header><div id="diffBody"></div></dialog>
 <dialog id="phoneDlg"><header><div><h2>Acompanhar pelo celular</h2><small>Uma página leve, em outro aparelho, com o que os agentes estão fazendo.</small></div><button class="link" id="phoneClose">Fechar</button></header><div id="phoneBody"></div></dialog>
 <div id="toast" role="status"></div>
@@ -528,7 +552,7 @@ const EFFORT_NAME = { low: "Baixo", medium: "Médio", high: "Alto", xhigh: "Muit
 const MODEL_ALIASES = { claude: [["fable", "Fable"], ["opus", "Opus"], ["sonnet", "Sonnet"], ["haiku", "Haiku"]] };
 const curProvider = () => { const ts = targets(); if (ts.length !== 1) return ""; const t = ts[0]; return t.startsWith("pool:") ? t.slice(5) : acc(t)?.provider || ""; };
 const curChoice = () => { const c = choice[curProvider()] || {}, p = prov(curProvider()); return { model: c.model || "", effort: p?.efforts?.includes(c.effort) ? c.effort : "" }; };
-const modelName = (provider, m) => (MODEL_ALIASES[provider] || []).find(([k]) => k === m)?.[1] || m;
+const modelName = (provider, m) => (m === "auto" ? "Automático" : (MODEL_ALIASES[provider] || []).find(([k]) => k === m)?.[1] || m);
 let isolate = null; // null = automático: isola quando a pasta já está ocupada ou vários vão editar ao mesmo tempo
 let repo = { cwd: "", repo: false, busy: false };
 let chat = null, chatTarget = null; // conversa aberta e pra quem vai a próxima mensagem
@@ -572,6 +596,7 @@ function paintSettings() {
     + row("importChats", S.settings.importChats, "Conversas dos outros programas", "Mostra na lateral o que o Claude Code e o Codex já guardaram nesta máquina, para continuar daqui.")
     + row("autoClean", S.settings.autoClean, "Limpeza de clones", "Cópias de repositório que já viraram PR e não têm nada pendente vão sozinhas para a Lixeira.")
     + row("autoRead", S.settings.autoRead, "Leitura sem perguntar", "No modo \"Pergunta antes\", o que só lê (listar, buscar, ver arquivo, consultar o git e o GitHub) roda direto. Escrever, apagar, instalar e qualquer comando que a Revoada não reconheça continuam pedindo permissão.")
+    + row("sound", S.settings.sound, "Aviso sonoro", "Um som quando um agente termina um trabalho demorado e outro quando ele precisa da sua permissão. Resposta rápida com a janela em foco não toca.")
     + row("suggest", S.settings.suggest, "Sugestão do próximo pedido", "Quando o agente termina, o campo oferece a próxima mensagem provável: Tab aceita, Enter envia. Usa o modelo mais barato do Claude a cada resposta.")
     + row("autoReview", S.settings.autoReview, "Revisão automática", "Quando um agente mexe em arquivo, uma conta de outro provedor revisa o resultado em seguida. Gasta uso da conta que revisa.")
     + `<button class="set" id="openPhone"><b>Acompanhar pelo celular</b><span class="tag ${S.remote?.on ? "ok" : "mute"}">${S.remote?.on ? "Ligado" : "Desligado"}</span><small>Ver os agentes, permitir ou negar um pedido e parar, de outro aparelho na sua rede.</small></button>`
@@ -632,6 +657,7 @@ function go(v) {
   if (v.type === "start") renderStart();
   if (v.type === "clones") renderClones();
   if (v.type === "sched") renderSched();
+  if (v.type === "board") renderBoard();
   if (v.type === "mission") { mission = null; renderMission(); }
 }
 document.querySelector("aside").addEventListener("click", (e) => { const b = e.target.closest("[data-go]"); if (b) go({ type: b.dataset.go }); });
@@ -657,6 +683,9 @@ async function refresh(force) {
   $("navAcc").textContent = `${A.filter(ready).length}/${A.length}`;
   $("navStart").style.display = S.settings.onboarded ? "none" : "flex";
   $("schedCount").textContent = S.schedules || "";
+  $("boardCount").textContent = S.board || "";
+  if (view.type === "board") renderBoard();
+  chime();
   if (view.type === "mission") renderMission();
   if (!S.settings.onboarded) {
     const st = steps(); $("navStartN").textContent = `${st.filter((x) => x.done).length}/${st.length}`;
@@ -691,13 +720,34 @@ function threadRow(t, cls) {
   return `<button class="item ${cls} ${on ? "on" : ""}" data-open="${t.type}:${t.id}" title="${esc(t.title)}${t.src ? `\nVeio do ${t.src === "codex" ? "Codex" : "Claude Code"}` : ""}${t.type === "run" ? "" : "\nDuplo clique para renomear"}">
     <span class="t">${esc(t.title)}</span>${t.wait ? '<i class="dot wait" title="esperando sua permissão"></i>' : t.limit ? '<i class="dot"></i>' : t.busy ? '<i class="dot busy" title="trabalhando"></i>' : t.live ? '<i class="dot live" title="aberta, parada"></i>' : ""}${t.type === "imp" ? "" : `<span class="x" data-del="${t.type}:${t.id}" role="button" aria-label="Apagar conversa" title="Apagar conversa">×</span>`}</button>`;
 }
+// busca no conteúdo das conversas (as daqui e, se ligadas, as dos outros programas)
+const found = { q: "", chats: [], history: [], busy: false };
+function searchContent(q) {
+  clearTimeout(searchContent.t);
+  found.q = q; found.chats = []; found.history = []; found.busy = true;
+  searchContent.t = setTimeout(async () => {
+    const r = await api(`search?q=${encodeURIComponent(q)}`).catch(() => ({ chats: [], history: [] }));
+    if (found.q !== q) return; // a pessoa já digitou outra coisa
+    Object.assign(found, r, { busy: false });
+    renderThreads();
+  }, 250);
+}
 function renderThreads() {
   if (document.querySelector("#threads input.rename")) return; // não redesenha no meio de um renomear
   const q = $("tq").value.trim().toLowerCase(), all = allThreads(), byDir = new Map();
   let html = "";
   if (q) {
     const hits = all.filter((t) => `${t.title} ${t.cwd}`.toLowerCase().includes(q));
-    html = `<h4>${hits.length ? plural(hits.length, "conversa encontrada", "conversas encontradas") : "Nenhuma conversa com esse texto"}</h4>` + hits.map((t) => threadRow(t, "")).join("");
+    html = `<h4>${hits.length ? plural(hits.length, "conversa encontrada", "conversas encontradas") : "Nenhuma conversa com esse texto no título"}</h4>` + hits.map((t) => threadRow(t, "")).join("");
+    // além do título: o que foi dito dentro das conversas
+    if (q.length >= 3) {
+      if (found.q !== q) searchContent(q);
+      else {
+        const mark = (t) => esc(t).replace(new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "ig"), (m) => `<mark>${m}</mark>`);
+        const rows = [...found.chats.map((r) => ({ open: `chat:${r.id}`, title: r.title, sn: r.snippet })), ...found.history.map((r) => ({ open: `imp:${r.file}`, title: r.title, sn: r.snippet }))];
+        html += `<h4>${found.busy ? "Procurando no conteúdo" : rows.length ? `No conteúdo · ${rows.length}` : "Nada no conteúdo das conversas"}</h4>` + rows.map((r) => `<button class="item hit" data-open="${esc(r.open)}" title="${esc(r.title)}"><span class="t">${esc(r.title)}</span><span class="sn">${mark(r.sn)}</span></button>`).join("");
+      }
+    }
   } else {
     for (const t of all) { if (!byDir.has(t.cwd)) byDir.set(t.cwd, []); byDir.get(t.cwd).push(t); }
     if (cwd() && !byDir.has(cwd())) byDir.set(cwd(), []);
@@ -828,15 +878,125 @@ $("popTarget").onclick = (e) => {
   picked.clear(); cur.forEach((t) => picked.add(t)); store.set("targets", JSON.stringify([...picked]));
   paintTargets(); paintComposer();
 };
+// ---------- quadro de tarefas ----------
+const COLS = [["todo", "A fazer"], ["doing", "Fazendo"], ["review", "Revisar"], ["done", "Feito"]];
+let boardCards = [], dragging = null;
+function cardHtml(c) {
+  const st = c.state === "todo" ? (c.note ? `<span class="st bad">${esc(c.note)}</span>` : "")
+    : c.waiting ? `<span class="st wait"><i></i>esperando você</span>`
+    : c.working ? `<span class="st run"><i></i>${c.state === "review" ? "outra conta revisando" : "trabalhando"}</span>`
+    : c.note ? `<span class="st bad">${esc(c.note)}</span>` : "";
+  const acts = (c.state === "todo" ? `<button class="link" data-card-start="${c.id}">Começar</button>` : "")
+    + (c.convo ? `<button class="link" data-card-open="${c.convo}">Abrir a conversa</button>` : "")
+    + (c.state === "review" && !c.working ? `<button class="link" data-card-done="${c.id}">Marcar como feito</button>` : "")
+    + (c.working ? "" : `<button class="link" data-card-rm="${c.id}" style="margin-left:auto">Tirar</button>`);
+  return `<div class="card" draggable="true" data-card="${c.id}"><b>${esc(c.title)}</b><small title="${esc(c.cwd)}">${esc(targetName(c.target))} · ${esc(base(c.cwd))}</small>${st}<div class="do">${acts}</div></div>`;
+}
+async function renderBoard() {
+  boardCards = await api("board").catch(() => boardCards);
+  if (view.type !== "board" || dragging) return;
+  const ts = targets();
+  $("boardSub").textContent = ts.length ? `Tarefa nova vai para ${targetName(ts[0])}, em ${short(cwd())}. A pasta e a conta são as do campo da tela inicial.` : "Nenhuma conta pronta para receber tarefa.";
+  $("boardAll").style.display = boardCards.some((c) => c.state === "todo") ? "" : "none";
+  const html = COLS.map(([k, name]) => { const list = boardCards.filter((c) => c.state === k); return `<div class="col" data-col="${k}"><h4><span>${name}</span><span>${list.length || ""}</span></h4>${list.map(cardHtml).join("") || `<div class="empty">${k === "todo" ? "Escreva uma tarefa ali em cima." : k === "doing" ? "Arraste um cartão para cá pra começar." : k === "review" ? "O cartão chega aqui sozinho quando o agente termina." : "Arraste para cá o que você conferiu."}</div>`}</div>`; }).join("");
+  if ($("board").dataset.h !== html) { $("board").dataset.h = html; $("board").innerHTML = html; }
+}
+async function boardDo(path, body) { try { await api(path, "POST", body || {}); } catch {} await refresh(); return renderBoard(); }
+$("boardAdd").onclick = async () => {
+  const text = $("boardText").value.trim(), ts = targets();
+  if (!text) return toast("Escreva a tarefa.");
+  if (!ts.length) return toast("Nenhuma conta pronta. Faça login em Contas.");
+  await api("board", "POST", { prompt: text, cwd: cwd(), target: ts[0], split: text.includes("\n") }).catch(() => null);
+  $("boardText").value = ""; $("boardText").style.height = "auto";
+  await refresh(); renderBoard();
+};
+$("boardText").oninput = (e) => { e.target.style.height = "auto"; e.target.style.height = Math.min(e.target.scrollHeight, 160) + "px"; };
+$("boardText").onkeydown = (e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); $("boardAdd").click(); } };
+$("boardAll").onclick = async () => { for (const c of boardCards.filter((x) => x.state === "todo")) await api(`board/${c.id}/start`, "POST", {}).catch(() => {}); await refresh(); renderBoard(); };
+$("board").onclick = async (e) => {
+  const b = e.target.closest("button"); if (!b) return;
+  if (b.dataset.cardStart) return boardDo(`board/${b.dataset.cardStart}/start`);
+  if (b.dataset.cardDone) return boardDo(`board/${b.dataset.cardDone}/move`, { to: "done" });
+  if (b.dataset.cardOpen) return go({ type: "chat", id: b.dataset.cardOpen });
+  if (b.dataset.cardRm) { await api(`board/${b.dataset.cardRm}`, "DELETE").catch(() => {}); await refresh(); return renderBoard(); }
+};
+// arrastar entre colunas: para "Fazendo" começa, para "Feito" encerra, de volta para "A fazer" solta a conversa
+$("board").addEventListener("dragstart", (e) => { const c = e.target.closest?.("[data-card]"); if (!c) return; dragging = c.dataset.card; c.classList.add("drag"); e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", dragging); });
+$("board").addEventListener("dragend", () => { dragging = null; document.querySelectorAll("#board .drag, #board .over").forEach((el) => el.classList.remove("drag", "over")); renderBoard(); });
+$("board").addEventListener("dragover", (e) => { const col = e.target.closest?.("[data-col]"); if (!col || !dragging) return; e.preventDefault(); document.querySelectorAll("#board .over").forEach((el) => el !== col && el.classList.remove("over")); col.classList.add("over"); });
+$("board").addEventListener("drop", async (e) => {
+  const col = e.target.closest?.("[data-col]"), id = dragging; if (!col || !id) return;
+  e.preventDefault(); dragging = null;
+  try { await api(`board/${id}/move`, "POST", { to: col.dataset.col }); } catch {}
+  await refresh(); renderBoard();
+});
+
+// ---------- plano em arquivo ----------
+const planInfo = { id: null, done: 0, total: 0, text: "", on: false, at: 0 };
+async function loadPlan(force) {
+  if (view.type !== "chat" || !chat) return;
+  if (!force && planInfo.id === chat.id && Date.now() - planInfo.at < 4000) return;
+  const id = chat.id, p = await api(`convos/${id}/plan`).catch(() => null);
+  if (!p || !chat || chat.id !== id) return;
+  const changed = planInfo.id !== id || planInfo.done !== p.done || planInfo.total !== p.total || planInfo.on !== p.on;
+  Object.assign(planInfo, p, { id, at: Date.now() });
+  if (changed) renderChat();
+  if ($("planDlg").open) paintPlan();
+}
+function paintPlan() {
+  $("planSub").textContent = planInfo.total ? `${planInfo.done} de ${plural(planInfo.total, "passo", "passos")} · o agente mantém este arquivo e continua dele se a conversa for cortada ou trocar de conta` : "o agente escreve o plano na primeira resposta";
+  $("planBody").innerHTML = `<div class="md">${planInfo.text.trim() ? md(planInfo.text) : "<p>Ainda não há plano escrito.</p>"}</div><div style="margin-top:18px"><button class="link" id="planOff">Desligar o plano nesta conversa</button></div>`;
+}
+$("planClose").onclick = () => $("planDlg").close();
+$("planBody").onclick = async (e) => { if (e.target.id !== "planOff" || !chat) return; await api(`convos/${chat.id}/plan`, "POST", { on: false }); $("planDlg").close(); toast("Plano desligado. O arquivo fica guardado."); loadPlan(true); };
+
+// ---------- aviso sonoro ----------
+// Dois sons feitos na hora (sem arquivo): um acorde curto quando um agente termina, duas notas quando
+// ele precisa de você. Só toca para trabalho que demorou ou com a janela fora de foco: resposta rápida
+// com você olhando não precisa de campainha.
+let audio = null;
+const QUIET_UNDER_MS = 12_000;
+function tone(notes) {
+  try {
+    audio ||= new (window.AudioContext || window.webkitAudioContext)();
+    if (audio.state === "suspended") audio.resume();
+    const t0 = audio.currentTime + 0.02;
+    notes.forEach(([freq, at, len]) => {
+      const osc = audio.createOscillator(), gain = audio.createGain();
+      osc.type = "sine"; osc.frequency.value = freq;
+      gain.gain.setValueAtTime(0, t0 + at); gain.gain.linearRampToValueAtTime(0.14, t0 + at + 0.015); gain.gain.exponentialRampToValueAtTime(0.0008, t0 + at + len);
+      osc.connect(gain).connect(audio.destination); osc.start(t0 + at); osc.stop(t0 + at + len + 0.05);
+    });
+    return true;
+  } catch { return false; }
+}
+const SOUND = { done: [[659.25, 0, 0.5], [987.77, 0.11, 0.7]], ask: [[880, 0, 0.16], [880, 0.24, 0.16], [1174.66, 0.48, 0.3]] };
+const heard = new Map(); // conversa -> { working, waiting, since }
+function chime() {
+  const first = !heard.size && !chime.ran; chime.ran = true;
+  let play = null;
+  for (const c of S.convos) {
+    // conversa que aparece já esperando (aberta pelo quadro, por agendamento ou por outra janela) também avisa
+    const was = heard.get(c.id) || (first ? null : { working: false, waiting: false, since: 0 });
+    if (was && !first) {
+      const away = document.hidden || !document.hasFocus();
+      if (c.waiting && !was.waiting) play = "ask";
+      else if (was.working && !c.working && (away || Date.now() - was.since > QUIET_UNDER_MS) && play !== "ask") play = "done";
+    }
+    heard.set(c.id, { working: c.working, waiting: c.waiting, since: c.working ? (was?.working ? was.since : Date.now()) : 0 });
+  }
+  if (play && S.settings.sound) { chime.last = play; tone(SOUND[play]); }
+}
+
 // ---------- modelo e esforço ----------
 function paintModel() {
   const pv = curProvider(), p = prov(pv), ch = curChoice(), known = MODEL_ALIASES[pv] || [];
-  const custom = ch.model && !known.some(([k]) => k === ch.model) ? ch.model : "";
+  const custom = ch.model && ch.model !== "auto" && !known.some(([k]) => k === ch.model) ? ch.model : "";
   $("popModel").innerHTML = `<span class="label">Modelo · ${esc(p?.name || "")}</span>
-    <div class="seg"><button class="${ch.model ? "" : "on"}" data-model="">Padrão da conta</button>${known.map(([k, n]) => `<button class="${ch.model === k ? "on" : ""}" data-model="${k}">${n}</button>`).join("")}</div>
+    <div class="seg"><button class="${ch.model ? "" : "on"}" data-model="">Padrão da conta</button>${p?.auto ? `<button class="${ch.model === "auto" ? "on" : ""}" data-model="auto" title="Escolhe o porte do modelo pelo pedido: consulta rápida vai no mais barato, trabalho pesado no mais forte">Automático</button>` : ""}${known.map(([k, n]) => `<button class="${ch.model === k ? "on" : ""}" data-model="${k}">${n}</button>`).join("")}</div>
     <input type="text" id="modelFree" spellcheck="false" autocomplete="off" placeholder="${known.length ? "ou o nome completo de um modelo" : "nome do modelo, como o CLI aceita"}" value="${esc(custom)}" aria-label="Nome do modelo">
     ${p?.efforts?.length ? `<span class="label" style="padding-top:6px">Esforço</span><div class="seg"><button class="${ch.effort ? "" : "on"}" data-effort="">Padrão</button>${p.efforts.map((e) => `<button class="${ch.effort === e ? "on" : ""}" data-effort="${e}">${EFFORT_NAME[e] || e}</button>`).join("")}</div>` : `<small>${esc(p?.name || "Este agente")} não tem ajuste de esforço pelo CLI.</small>`}
-    <small>Vale para as próximas respostas${view.type === "chat" ? " desta conversa" : ""}. Trocar de modelo no meio mantém a sessão do agente.</small>`;
+    <small>${ch.model === "auto" ? "No automático a Revoada lê o seu pedido e escolhe: pergunta curta vai no modelo mais barato, trabalho comum no do meio, e refatoração, investigação ou pedido longo no mais forte. O esforço acompanha. " : ""}Vale para as próximas respostas${view.type === "chat" ? " desta conversa" : ""}. Trocar de modelo no meio mantém a sessão do agente.</small>`;
 }
 function setChoice(patch) { const pv = curProvider(); if (!pv) return; choice[pv] = { ...curChoice(), ...patch }; store.set("models", JSON.stringify(choice)); paintModel(); paintComposer(); }
 $("modelChip").onclick = (e) => { e.stopPropagation(); paintModel(); togglePop("popModel"); };
@@ -1113,7 +1273,7 @@ function msgParts(m, i) {
   // o cartão de permissão já mostra o comando: a linha dele some enquanto espera, e depois de permitido fica só a linha
   const same = (ask, it) => (it.kind === "cmd" && it.command === ask.detail) || (it.kind === "files" && it.changes.some((c) => c.path === ask.detail));
   const pending = items.filter((x) => x.kind === "ask" && x.state === "pending");
-  const parts = [["who", `<div class="who">${m.review ? `<span class="tag ok">${m.reviewKind === "security" ? "Auditoria de segurança" : "Revisão"}</span>` : ""}<b>${esc(accName(acc(m.accountId)))}</b>${m.state === "working" ? "" : `<span class="num">${dur(took)}</span>`}${m.model ? `<span class="mdl">${esc(m.model.replace(/^claude-/, "").replace(/\[.*\]$/, ""))}</span>` : ""}${m.tokens ? `<button class="xr num" data-xray="${i}" title="Ver o que pesou nesta resposta">${tok(m.tokens.in + m.tokens.out + m.tokens.cache)} tokens</button>` : ""}${m.brain?.length ? `<span class="b" title="${esc(m.brain.join("\n"))}">${plural(m.brain.length, "nota", "notas")} do cérebro</span>` : ""}${m.state === "stopped" ? "<span>interrompido</span>" : ""}</div>`]];
+  const parts = [["who", `<div class="who">${m.review ? `<span class="tag ok">${m.reviewKind === "security" ? "Auditoria de segurança" : "Revisão"}</span>` : ""}<b>${esc(accName(acc(m.accountId)))}</b>${m.state === "working" ? "" : `<span class="num">${dur(took)}</span>`}${m.model ? `<span class="mdl" ${m.routed ? `title="Modelo automático: este pedido foi lido como ${m.routed}"` : ""}>${esc(m.model.replace(/^claude-/, "").replace(/\[.*\]$/, ""))}${m.routed ? ` · auto ${m.routed}` : ""}</span>` : ""}${m.tokens ? `<button class="xr num" data-xray="${i}" title="Ver o que pesou nesta resposta">${tok(m.tokens.in + m.tokens.out + m.tokens.cache)} tokens</button>` : ""}${m.brain?.length ? `<span class="b" title="${esc(m.brain.join("\n"))}">${plural(m.brain.length, "nota", "notas")} do cérebro</span>` : ""}${m.state === "stopped" ? "<span>interrompido</span>" : ""}</div>`]];
   if (m.tokens && openActs.has(`x:${i}`)) parts.push(["xray", xrayHtml(m)]);
   // raciocínio, comandos, arquivos e ferramentas seguidos viram um grupo só
   let group = [];
@@ -1183,6 +1343,10 @@ async function showDiff() {
 $("diffClose").onclick = () => $("diffDlg").close();
 $("chActs").onclick = async (e) => {
   if (e.target.id === "seeDiff" && chat) return showDiff();
+  if (e.target.id === "seePlan" && chat) {
+    if (!chat.plan) { await api(`convos/${chat.id}/plan`, "POST", { on: true }); toast("Plano ligado. Na próxima resposta o agente escreve o plano em arquivo e passa a seguir por ele."); return loadPlan(true); }
+    await loadPlan(true); paintPlan(); return $("planDlg").showModal();
+  }
   if (e.target.id === "askSec" && chat) { await api(`convos/${chat.id}/review`, "POST", { kind: "security" }).then(() => loadChat(true)).catch(() => {}); return; }
   if (e.target.id === "askReview" && chat) { await api(`convos/${chat.id}/review`, "POST", {}).then(() => loadChat(true)).catch(() => {}); return; }
   if (e.target.id !== "mkPr" || !chat) return;
@@ -1245,12 +1409,15 @@ function renderChat() {
   const queued = (chat.queue || []).map((q, j) => `<div class="m user"><div class="part">${q.attachments?.length ? `<div class="atts">${q.attachments.map((a) => attHtml(a)).join("")}</div>` : ""}<div class="bubble">${esc(tidy(q.text))}</div><span class="qnote">${chat.working ? (j ? "na fila" : "entra quando o agente terminar") : "ficou na fila: a resposta anterior deu erro"}<button class="link" data-unq="${j}">tirar</button></span></div></div>`).join("");
   if ($("queued").dataset.h !== queued) { $("queued").dataset.h = queued; $("queued").innerHTML = queued; }
   tickChat();
+  // o plano muda enquanto o agente trabalha; quando ele termina, busca a versão final sem esperar
+  if (chat.plan) { loadPlan(planInfo.busy && !chat.working); planInfo.busy = chat.working; }
   if (stick) box.scrollTop = box.scrollHeight;
   const a = acc(chat.accountId);
   $("chTitle").textContent = chat.title;
   const spent = chat.messages.reduce((n, m) => n + (m.tokens ? m.tokens.in + m.tokens.out + m.tokens.cache : 0), 0);
   $("chSub").textContent = `${a ? accName(a) : targetName(chat.target)} · ${chat.worktree ? `cópia isolada de ${base(chat.worktree.main)}, branch ${chat.worktree.branch}` : brief(short(chat.cwd))}${chat.native ? "" : chat.messages.length > 2 ? " · próxima resposta leva o histórico" : ""}${spent ? ` · ${tok(spent)} tokens na conversa` : ""}`;
-  const acts = `<button class="link" id="seeDiff" title="O que mudou nos arquivos desta pasta">Mudanças</button>` + (chat.working ? "" : `<button class="link" id="askReview" title="Uma conta de outro provedor lê o que mudou, sem editar nada, e aponta defeitos">Revisar</button><button class="link" id="askSec" title="Outra conta audita a segurança: por onde entra dado de fora, onde ele chega e o que dá para explorar. Sem mudança pendente, audita o projeto inteiro.">Segurança</button>`) + (chat.worktree && !chat.working ? `<button class="link" id="mkPr" title="Pede ao agente para fazer commit, push e abrir o PR. Com o PR aberto e nada pendente, a cópia some sozinha.">Criar PR</button>` : "");
+  const planned = chat.plan && planInfo.id === chat.id;
+  const acts = `<button class="link" id="seePlan" title="${chat.plan ? "O plano que o agente mantém em arquivo para esta tarefa" : "Para tarefa longa: o agente escreve um plano em arquivo, marca os passos e continua dele se a conversa for cortada ou trocar de conta"}">${chat.plan ? `Plano${planned && planInfo.total ? ` ${planInfo.done}/${planInfo.total}` : ""}` : "Plano"}</button><button class="link" id="seeDiff" title="O que mudou nos arquivos desta pasta">Mudanças</button>` + (chat.working ? "" : `<button class="link" id="askReview" title="Uma conta de outro provedor lê o que mudou, sem editar nada, e aponta defeitos">Revisar</button><button class="link" id="askSec" title="Outra conta audita a segurança: por onde entra dado de fora, onde ele chega e o que dá para explorar. Sem mudança pendente, audita o projeto inteiro.">Segurança</button>`) + (chat.worktree && !chat.working ? `<button class="link" id="mkPr" title="Pede ao agente para fazer commit, push e abrir o PR. Com o PR aberto e nada pendente, a cópia some sozinha.">Criar PR</button>` : "");
   if ($("chActs").innerHTML !== acts) $("chActs").innerHTML = acts;
   paintComposer();
 }

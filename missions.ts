@@ -54,6 +54,7 @@ export function createMissions(o: {
   let list: Mission[] = (() => { try { return JSON.parse(readFileSync(o.file, "utf8")); } catch { return []; } })();
   const save = () => writeFileSync(o.file, JSON.stringify(list, null, 2));
   const get = (id: string) => list.find((m) => m.id === id);
+  const reviewing = new Set<string>();
 
   // anda cada missão para o próximo estado conforme as conversas dela terminam
   function advance() {
@@ -73,12 +74,13 @@ export function createMissions(o: {
           if (t.error) continue;
           const c = t.convo ? o.convo(t.convo) : null;
           if (!c) { if (t.convo) { t.error = "a conversa desta tarefa foi apagada"; changed = true; } else open++; continue; }
-          if (c.working) { open++; continue; }
+          // pedir a revisão e ela começar não é instantâneo: enquanto isso a tarefa ainda conta como aberta
+          if (c.working || reviewing.has(t.convo!)) { open++; continue; }
           // tarefa pronta que mexeu em arquivo passa por outra conta antes de contar como entregue
           if (!t.reviewed && c.lastState === "done") {
             t.reviewed = true;
             changed = true;
-            if (c.touchedFiles) { o.review(t.convo!).catch(() => {}); open++; }
+            if (c.touchedFiles) { const id = t.convo!; reviewing.add(id); o.review(id).catch(() => {}).finally(() => reviewing.delete(id)); open++; }
           }
         }
         if (!open && m.tasks.every((t) => t.error || t.convo)) { m.state = "pronta"; changed = true; }

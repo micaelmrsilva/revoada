@@ -11,6 +11,11 @@ Um app para macOS que junta as suas contas de agentes de código (Claude Code, C
 - **Modelo e esforço por conversa.** Escolhidos no campo de pedido e passados ao CLI de cada provedor. Cada resposta mostra o modelo que respondeu.
 - **Uso à vista.** Um anel no campo abre a janela de contexto da conversa e os limites da conta, com a hora em que renovam.
 - **Copiar, editar e tentar de novo.** Editar uma mensagem sua volta a conversa àquele ponto; tentar de novo refaz a última resposta.
+- **Quadro de tarefas.** Despeje as tarefas (uma por linha) e cada cartão vira um agente numa cópia própria do repositório. O cartão vai sozinho para "Revisar" quando o agente termina, depois de outra conta revisar o que ele mexeu.
+- **Plano em arquivo.** Em tarefa longa, o agente mantém um plano em markdown, marca os passos e continua dele se a conversa for cortada ou trocar de conta.
+- **Busca no conteúdo.** A busca da lateral procura no que foi dito dentro das conversas, as daqui e as dos outros programas.
+- **Modelo automático.** A Revoada lê o pedido e escolhe o porte do modelo: consulta rápida no mais barato, trabalho pesado no mais forte.
+- **Aviso sonoro.** Um som quando um agente termina um trabalho demorado e outro quando ele precisa de você.
 - **Rodízio que leva a conversa.** Quando uma conta bate no limite, o pedido continua na próxima, com o histórico do que foi dito e feito. Vale também para trocar de agente à mão, até entre provedores.
 - **Permissão por ação.** No modo "Pergunta antes", o agente para e mostra o comando ou o arquivo antes de agir. Você permite, permite sempre naquela conversa, ou nega. O que só lê roda direto, sem perguntar.
 - **Consumo à vista.** Quanto cada conta já usou das janelas do provedor, e o rodízio começa pela mais folgada. Cada resposta mostra os tokens que gastou.
@@ -69,6 +74,8 @@ A Revoada é um servidor local em Bun com uma página, embrulhado numa janela na
 | `schedule.ts` | Pedidos agendados: o relógio e a regra de hora perdida. |
 | `tools.ts` | Skills e servidores MCP da conta padrão nas outras contas. |
 | `safe.ts` | Decide se um comando só lê, para rodar sem perguntar no modo "Pergunta antes". |
+| `board.ts` | Quadro de tarefas: cartões, colunas e o que anda sozinho. |
+| `route.ts` | Modelo automático: as regras que dão o porte de um pedido. |
 | `remote.ts` | Acompanhamento pelo celular: a segunda porta, o código de acesso e a API reduzida. |
 | `public/` | A página principal (`index.html`), o painel da barra de menus (`mini.html`) a página do celular (`remoto.html`), o markdown das respostas (`md.js`) e a conversa ao vivo (`sync.js`). |
 | `desktop/` | A janela nativa em Swift: sobe o servidor, barra de menus, avisos e vigília. |
@@ -84,6 +91,10 @@ A Revoada é um servidor local em Bun com uma página, embrulhado numa janela na
 **Skills e MCP.** A conta padrão de cada provedor é a fonte. Skill entra nas outras contas como atalho (symlink) para a pasta original; a Revoada anota os atalhos que criou e só mexe neles, nunca numa pasta que a conta já tinha. Servidor MCP não é copiado para dentro do perfil: vai como argumento em cada execução (`--mcp-config` no Claude, `-c mcp_servers…` no Codex). Gemini e Grok recebem as skills, não os servidores MCP.
 
 **Conversa ao vivo.** Com a conversa aberta, a página mantém uma conexão (`/api/convos/<id>/stream`, Server-Sent Events) e o servidor avisa a cada mudança. O primeiro aviso leva a conversa inteira; os seguintes, só os itens que mudaram. Se a conexão cai, o navegador religa e recebe tudo de novo. A página do celular ainda consulta de tempo em tempo.
+
+**Modelo automático.** A escolha é feita por regras em `route.ts`, sem chamar modelo nenhum para decidir: palavras de trabalho pesado (refatorar, investigar, auditar, "por que") ou pedido longo vão no modelo mais forte; pergunta curta ou gesto único (rodar os testes, fazer o commit) no mais barato; o resto no do meio. Só o seu texto conta, não o que a Revoada põe em volta. Quando a regra erra, "Tentar de novo" com o modelo escolhido à mão resolve.
+
+**Plano em arquivo.** O arquivo fica em `~/.revoada/plans/`, fora do repositório. As instruções vão uma vez por sessão do agente; sessão nova (troca de conta, tentar de novo) recebe o plano como está.
 
 **Editar e tentar de novo.** A conversa é cortada na mensagem escolhida e ela é mandada outra vez. Nenhum CLI desfaz um trecho da própria sessão, então o agente começa uma sessão nova com o histórico do que ficou. Arquivos que a resposta descartada já tinha mexido continuam como estão.
 
@@ -135,7 +146,7 @@ bun test
 
 `tests/flows.test.ts` sobe o servidor de verdade numa pasta de usuário descartável, com CLIs de mentira no `PATH` (`tests/stubs/`) que falam os mesmos protocolos dos reais. Cobre contas, conversa, rodízio, permissão, consumo, anexos, cérebro, cópias, importação, revisão cruzada e o acesso pelo celular (código, bloqueio e o que a porta não expõe). `tests/agenda.test.ts` cobre o relógio dos agendamentos sem esperar o relógio de verdade. `tests/safe.test.ts` cobre o que roda sem perguntar e `tests/md.test.ts` a formatação das respostas, incluindo texto que tenta virar marcação. Não toca na sua pasta de usuário nem gasta conta.
 
-`tests/modelo.test.ts` cobre modelo, esforço, janela de contexto e a volta da conversa a um ponto; `tests/pagina.test.ts` confere que o script de cada página compila (nome declarado duas vezes derruba o painel inteiro). `tests/tela.test.ts` abre o painel num Chrome sem janela e mede o que só existe na tela: nada passa da largura da conversa, o texto chega aos poucos sem consulta repetida, o comando não aparece duas vezes e a fila funciona pelo teclado. No macOS as medidas de largura são repetidas num WKWebView (`tests/webkit.swift`), que é o motor da janela do app. Sem Chrome instalado esse arquivo é pulado.
+`tests/bracos.test.ts` cobre o quadro, o plano em arquivo, a busca no conteúdo e o modelo automático. `tests/modelo.test.ts` cobre modelo, esforço, janela de contexto e a volta da conversa a um ponto; `tests/pagina.test.ts` confere que o script de cada página compila (nome declarado duas vezes derruba o painel inteiro). `tests/tela.test.ts` abre o painel num Chrome sem janela e mede o que só existe na tela: nada passa da largura da conversa, o texto chega aos poucos sem consulta repetida, o comando não aparece duas vezes e a fila funciona pelo teclado. No macOS as medidas de largura são repetidas num WKWebView (`tests/webkit.swift`), que é o motor da janela do app. Sem Chrome instalado esse arquivo é pulado.
 
 O que os testes não cobrem: a janela nativa (barra de menus, vigília) e os CLIs reais. Se um provedor mudar o formato de saída, os testes continuam passando.
 
@@ -173,6 +184,7 @@ Sem `SIGN_ID`, o zip abre em outro Mac por clique direito > Abrir.
 - A vigília foi inspirada no [Insomnia](https://github.com/krishhgg/Insomnia) (MIT), sem usar código dele.
 - O supervisor veio de ideias do [orca](https://github.com/stablyai/orca), [agent-orchestrator](https://github.com/OrchestratorInc/agent-orchestrator), [firstmate](https://github.com/kunchenguid/firstmate) e [oh-my-claudecode](https://github.com/Yeachan-Heo/oh-my-claudecode); os pedidos agendados, do [OpenDots](https://github.com/CopilotKit/OpenDots) e do [OpenBot](https://github.com/CopilotKit/OpenBot); a auditoria de segurança, do [security-audit-skill](https://github.com/cloudflare/security-audit-skill); a arrumação do cérebro, do [ai-memory](https://github.com/akitaonrails/ai-memory) e do [agent-memory](https://github.com/tigerless-labs/agent-memory); as skills em todas as contas, do [skills](https://github.com/vercel-labs/skills). Sem usar código de nenhum deles.
 - A revisão cruzada, o acompanhamento pelo celular e os tokens por resposta vieram de ideias do [open-code-review](https://github.com/alibaba/open-code-review), do [coucou](https://github.com/Louis-CFM/coucou) e do [cost-xray](https://github.com/tigerless-labs/cost-xray), sem usar código deles.
+- O quadro, o plano em arquivo, a busca nas sessões, o modelo automático e o aviso sonoro vieram de ideias do [vibe-kanban](https://github.com/BloopAI/vibe-kanban), do [planning-with-files](https://github.com/OthmanAdi/planning-with-files), do [agentsview](https://github.com/kenn-io/agentsview), do [claude-code-router](https://github.com/musistudio/claude-code-router) e do [peon-ping](https://github.com/PeonPing/peon-ping), sem usar código deles.
 - QR do pareamento: [qrcode-generator](https://github.com/kazuhikoarase/qrcode-generator) (MIT).
 - Tipografia: Geist (SIL Open Font License), carregada do Google Fonts.
 

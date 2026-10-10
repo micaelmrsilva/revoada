@@ -6,7 +6,7 @@ let env: Awaited<ReturnType<typeof sobe>>;
 const SLOW = 30_000;
 const texts = (c: any, i = -1) => c.messages.at(i).items.filter((x: any) => x.kind === "text").map((x: any) => x.text).join(" ");
 
-beforeAll(async () => { env = await sobe(5400 + Math.floor(Math.random() * 90)); }, SLOW);
+beforeAll(async () => { env = await sobe(); }, SLOW);
 afterAll(async () => { await env?.stop(); });
 
 describe("modelo e esforço", () => {

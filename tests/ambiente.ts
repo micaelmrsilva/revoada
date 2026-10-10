@@ -6,7 +6,21 @@ import { join } from "path";
 
 const ROOT = join(import.meta.dir, "..");
 
-export async function sobe(port: number) {
+// Uma porta livre de verdade, com a seguinte livre também (é a do acompanhamento pelo celular).
+// Sortear dentro de uma faixa já caiu em cima do AirPlay (5000) e do Postgres (5432).
+function freePort(): number {
+  for (let i = 0; i < 20; i++) {
+    const a = Bun.serve({ port: 0, hostname: "127.0.0.1", fetch: () => new Response("") });
+    const port = a.port!;
+    let ok = true;
+    try { Bun.serve({ port: port + 1, hostname: "127.0.0.1", fetch: () => new Response("") }).stop(true); } catch { ok = false; }
+    a.stop(true);
+    if (ok) return port;
+  }
+  throw new Error("não achei duas portas livres seguidas");
+}
+
+export async function sobe(port: number = freePort()) {
   const home = mkdtempSync(join(process.env.RUNNER_TEMP || tmpdir(), "revoada-demo-"));
   const origin = `http://127.0.0.1:${port}`;
   const repo = join(home, "git", "loja");

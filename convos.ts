@@ -5,6 +5,7 @@
 // No modo "perguntar" o agente pede permissão antes de cada ação e a resposta vem da página.
 import { mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "fs";
 import { join } from "path";
+import { AUTO, route, type Tier } from "./route";
 
 const HANDOFF_CHARS = 14_000;
 const HANDOFF_MSG_CHARS = 2_500;
@@ -40,6 +41,7 @@ export type Msg = {
   sent?: { ask: number; brain: number; handoff: number; resumed: boolean };
   ctx?: Ctx;
   model?: string;      // modelo que respondeu de fato, como o CLI informou
+  routed?: Tier;       // porte que o modelo automático deu a este pedido
   review?: boolean;    // resposta de outra conta revisando o trabalho desta conversa
   reviewKind?: "security";
 };
@@ -51,8 +53,10 @@ export type Convo = {
   messages: Msg[]; working: boolean; at: number; rev: number;
   queue?: Queued[];
   suggest?: string;    // próxima mensagem provável, oferecida no campo quando o agente termina
-  model?: string;      // escolhidos pelo usuário para as próximas respostas; sem valor, vale o padrão da conta
+  model?: string;      // escolhidos pelo usuário para as próximas respostas; sem valor, vale o padrão da conta ("auto" = decide pelo pedido)
   effort?: string;
+  plan?: boolean;      // tarefa longa: o agente mantém um plano em arquivo e continua dele
+  planTold?: string;   // sessão do agente que já recebeu as instruções do plano
   waiting?: boolean;   // parado esperando o usuário permitir ou negar algo
   allow?: string[];    // ferramentas que o usuário mandou permitir sempre nesta conversa
   titled?: boolean;    // já tem título de verdade (gerado ou digitado)
@@ -226,6 +230,8 @@ export function createConvos(d: {
   limitRe: RegExp; strictRe: RegExp; rotate: () => boolean;
   brainContext: (query: string, hint: string) => Promise<{ text: string; notes: string[] } | null>;
   onIdle: () => void;
+  // pasta dos planos em arquivo das tarefas longas (fora do repositório, pra não sujar o projeto)
+  planDir?: string;
   // garante que a pasta de trabalho existe (a cópia isolada pode ter sido limpa)
   prepare: (c: Convo) => Promise<void>;
   onUsage: (a: Acc, windows: Usage[]) => void;
@@ -270,6 +276,27 @@ export function createConvos(d: {
     timers.set(c.id, setTimeout(() => { timers.delete(c.id); if (convos.has(c.id)) writeFileSync(join(d.dir, `${c.id}.json`), JSON.stringify(c)); }, 800));
   }
 
+  const planFile = (id: string) => join(d.planDir || d.dir, `${id}.md`);
+  const readPlan = (id: string) => { try { return readFileSync(planFile(id), "utf8"); } catch { return ""; } };
+  const planBlock = (file: string, cur: string) => `<plano-em-arquivo>
+Esta é uma tarefa longa. Mantenha um plano no arquivo ${file} e trate-o como a sua memória de trabalho: a conversa pode ser cortada, trocar de conta ou continuar outro dia, e o arquivo é o que sobra.
+
+Formato:
+# Objetivo
+(uma ou duas linhas)
+## Passos
+- [ ] passo ainda por fazer
+- [x] passo concluído
+## Decisões
+(o que foi decidido e por quê, uma linha cada)
+## Onde parei
+(o que estava no meio e o que vem em seguida)
+
+Antes de qualquer coisa leia o arquivo. Se já houver plano, continue dele em vez de planejar de novo. Marque cada passo assim que ele terminar e atualize "Onde parei" antes de encerrar cada resposta. Passos pequenos o bastante pra caber numa resposta.
+
+${cur.trim() ? `Plano como está agora:\n\n${clip(cur, 8000)}` : "Ainda não há plano neste arquivo: comece escrevendo."}
+</plano-em-arquivo>`;
+
   // o que já foi dito e feito, pra uma conta nova continuar de onde a outra parou
   function handoff(c: Convo, upTo: number, partial: Msg, why: string): string | null {
     const describe = (m: Msg) => {
@@ -296,7 +323,7 @@ export function createConvos(d: {
     return `<conversa-anterior>\nEsta conversa vinha sendo feita por outra conta de agente (${why}). Abaixo está o que foi dito e feito até aqui; os arquivos da pasta de trabalho já refletem esse trabalho. Continue de onde parou, sem repetir o que já está pronto e sem comentar esta troca.\n\n${past[0]}\n\n${skipped > 0 ? `[… ${skipped} mensagens do meio omitidas …]\n\n` : ""}${keep.join("\n\n")}\n</conversa-anterior>\n\nMensagem atual do usuário:`;
   }
 
-  async function exec(c: Convo, msg: Msg, acc: Acc, prompt: string, ctx: string | undefined, resume: string | null, attempt: number, files: Attachment[], force?: Mode) {
+  async function exec(c: Convo, msg: Msg, acc: Acc, prompt: string, ctx: string | undefined, resume: string | null, attempt: number, files: Attachment[], force?: Mode, routeText?: string) {
     const adapter = ADAPTERS[acc.provider];
     const bin = d.binPath(acc.provider);
     if (!bin) return { ok: false, limit: false, stopped: false, produced: false, err: "CLI não instalado" };
@@ -308,8 +335,16 @@ export function createConvos(d: {
     if (!force && c.mode === "ask" && !adapter.canAsk && attempt === 0) items.push({ k: `note:ask:${items.length}`, kind: "note", text: "Este agente não pede permissão passo a passo. Rodando como \"pode editar\": mexe só na pasta de trabalho.", tone: "mute" });
     // revisão roda no padrão da conta do revisor; a escolha da conversa vale para o provedor dela
     const mine = !force;
-    const effort = mine && c.effort && EFFORTS[acc.provider]?.includes(c.effort) ? c.effort : undefined;
-    const opts: RunOpts = { prompt, ctx, resume, mode, dirs: [d.vault, ...(files.length ? [d.attachDir] : [])], files, extra: d.extraArgs?.(acc) || [], model: mine ? c.model : undefined, effort };
+    let model = mine ? c.model : undefined;
+    let effort = mine && c.effort && EFFORTS[acc.provider]?.includes(c.effort) ? c.effort : undefined;
+    if (model === AUTO) {
+      // decide pelo que o usuário escreveu, não pelo que a Revoada pôs em volta (cérebro, histórico)
+      const r = route(acc.provider, routeText ?? prompt, { attachments: files.length });
+      msg.routed = r.tier;
+      model = r.model;
+      effort = r.effort && EFFORTS[acc.provider]?.includes(r.effort) ? r.effort : undefined;
+    }
+    const opts: RunOpts = { prompt, ctx, resume, mode, dirs: [d.vault, ...(files.length ? [d.attachDir] : []), ...(c.plan && d.planDir ? [d.planDir] : [])], files, extra: d.extraArgs?.(acc) || [], model, effort };
     const proc = Bun.spawn([bin, ...adapter.args(opts)], {
       cwd: c.cwd, env: { ...d.envFor(acc), TERM: "dumb", NO_COLOR: "1" }, stdin: adapter.stdin ? "pipe" : "ignore", stdout: "pipe", stderr: "pipe",
     });
@@ -436,10 +471,16 @@ export function createConvos(d: {
           if (history) prompt = `${history}\n${userText}`;
           msg.sent = { ask: userText.length, brain: ctx?.length || 0, handoff: history?.length || 0, resumed: false };
         } else msg.sent = { ask: userText.length, brain: 0, handoff: 0, resumed: true };
+        // plano em arquivo: quem começa (ou recomeça) a sessão recebe as instruções e o plano como está
+        if (c.plan && d.planDir && c.planTold !== (resume || "")) {
+          const block = planBlock(planFile(c.id), readPlan(c.id));
+          if (resume) prompt = `${block}\n\n${prompt}`; else ctx = ctx ? `${ctx}\n\n${block}` : block;
+        }
         c.accountId = acc.id;
         c.provider = acc.provider;
         touch(c);
-        const r = await exec(c, msg, acc, prompt, ctx, resume, attempt++, userMsg.attachments || []);
+        const r = await exec(c, msg, acc, prompt, ctx, resume, attempt++, userMsg.attachments || [], undefined, userText);
+        if (c.plan && r.sessionId) c.planTold = r.sessionId;
         if (r.sessionId) c.native = { accountId: acc.id, sessionId: r.sessionId };
         if (r.stopped) { msg.state = "stopped"; break; }
         if (r.ok) { msg.state = "done"; break; }
@@ -539,7 +580,7 @@ Responda em português, com uma lista numerada do mais grave para o menos. Cada 
     return msg;
   }
 
-  function send(c: Convo, text: string, patch: { target?: string; mode?: Mode; brain?: boolean; attachments?: Attachment[]; model?: string | null; effort?: string | null } = {}) {
+  function send(c: Convo, text: string, patch: { target?: string; mode?: Mode; brain?: boolean; attachments?: Attachment[]; model?: string | null; effort?: string | null; plan?: boolean } = {}) {
     if (c.working) {
       (c.queue ||= []).push({ text, at: Date.now(), target: patch.target, mode: patch.mode, brain: patch.brain, attachments: patch.attachments?.length ? patch.attachments : undefined, model: patch.model, effort: patch.effort });
       touch(c);
@@ -553,6 +594,7 @@ Responda em português, com uma lista numerada do mais grave para o menos. Cada 
     // null limpa a escolha (volta ao padrão da conta); sem o campo, fica como estava
     if (patch.model !== undefined) { if (patch.model) c.model = patch.model; else delete c.model; }
     if (patch.effort !== undefined) { if (patch.effort) c.effort = patch.effort; else delete c.effort; }
+    if (typeof patch.plan === "boolean") { if (patch.plan) c.plan = true; else { delete c.plan; delete c.planTold; } }
     if (patch.mode) c.mode = patch.mode;
     if (typeof patch.brain === "boolean") c.brain = patch.brain;
     c.messages.push({ role: "user", at: Date.now(), text, attachments: patch.attachments?.length ? patch.attachments : undefined });
@@ -613,19 +655,41 @@ Responda em português, com uma lista numerada do mais grave para o menos. Cada 
     return () => { closed = true; clearTimeout(timer); watchers.get(id)?.delete(kick); if (!watchers.get(id)?.size) watchers.delete(id); };
   }
 
-  function create(o: { prompt: string; target: string; cwd: string; mode: Mode; brain: boolean; worktree?: Convo["worktree"]; attachments?: Attachment[]; model?: string | null; effort?: string | null }) {
+  function create(o: { prompt: string; target: string; cwd: string; mode: Mode; brain: boolean; worktree?: Convo["worktree"]; attachments?: Attachment[]; model?: string | null; effort?: string | null; plan?: boolean }) {
     const c: Convo = {
       id: crypto.randomUUID().slice(0, 8), title: (o.prompt.split("\n")[0] || o.attachments?.[0]?.name || "Conversa").slice(0, 80), cwd: o.cwd, target: o.target, mode: o.mode, brain: o.brain,
       accountId: null, provider: o.target.startsWith("pool:") ? o.target.slice(5) : d.account(o.target)?.provider || "", native: null,
       messages: [], working: false, at: Date.now(), rev: 0, worktree: o.worktree,
     };
     convos.set(c.id, c);
-    send(c, o.prompt, { attachments: o.attachments, model: o.model, effort: o.effort });
+    send(c, o.prompt, { attachments: o.attachments, model: o.model, effort: o.effort, plan: o.plan });
     return c;
   }
 
   return {
     create, send, review, watch, rewind,
+    // plano em arquivo da conversa: o texto e quantos passos já foram marcados
+    plan(id: string) {
+      const c = convos.get(id), text = c?.plan ? readPlan(id) : "";
+      const boxes = [...text.matchAll(/^\s*[-*] \[([ xX])\]/gm)];
+      return { on: !!c?.plan, text, total: boxes.length, done: boxes.filter((b) => b[1] !== " ").length, file: planFile(id) };
+    },
+    setPlan(id: string, on: boolean) { const c = convos.get(id); if (!c) return; if (on) c.plan = true; else { delete c.plan; delete c.planTold; } touch(c); },
+    // busca no que foi dito em todas as conversas guardadas: seu texto e o texto das respostas
+    search(q: string, max = 30) {
+      const needle = q.toLowerCase(), out: { id: string; title: string; cwd: string; at: number; snippet: string; who: string }[] = [];
+      for (const c of [...convos.values()].sort((a, b) => b.at - a.at)) {
+        for (const m of c.messages) {
+          const text = m.role === "user" ? m.text || "" : (m.items || []).filter((i) => i.kind === "text").map((i: any) => i.text).join("\n");
+          const at = text.toLowerCase().indexOf(needle);
+          if (at < 0) continue;
+          out.push({ id: c.id, title: c.title, cwd: c.cwd, at: m.at, who: m.role === "user" ? "você" : "agente", snippet: text.slice(Math.max(0, at - 70), at + needle.length + 110).replace(/\s+/g, " ").trim() });
+          break; // uma linha por conversa: a ocorrência mais antiga
+        }
+        if (out.length >= max) break;
+      }
+      return out;
+    },
     unqueue(id: string, index: number) { const c = convos.get(id); if (c?.queue?.[index]) { c.queue.splice(index, 1); if (!c.queue.length) delete c.queue; touch(c); } },
     get: (id: string) => convos.get(id),
     rename(id: string, title: string) { const c = convos.get(id); if (c) { c.title = title; c.titled = true; touch(c); } },

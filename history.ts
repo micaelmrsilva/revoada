@@ -181,5 +181,50 @@ export function createHistory(o: { homes: () => Home[]; skipCwd: (cwd: string) =
     };
   }
 
-  return { list, counts, toConvo };
+  // Busca no conteúdo das sessões que os outros programas guardaram. Com o ripgrep instalado ele acha os
+  // arquivos em milissegundos; sem ele, lê só os mais recentes, até um teto de bytes.
+  const SCAN_FILES = 300, SCAN_BYTES = 120_000_000, SNIPPET_BYTES = 6_000_000;
+  async function search(q: string, max = 30) {
+    const needle = q.toLowerCase();
+    const all = files().sort((a, b) => b.mtime - a.mtime);
+    let hits: string[] | null = null;
+    const rg = Bun.which("rg");
+    if (rg && all.length) {
+      try {
+        const dirs = [...new Set(o.homes().map((h) => join(h.dir, h.provider === "claude" ? "projects" : "sessions")))];
+        const p = Bun.spawn([rg, "-l", "-i", "-F", "--no-messages", "-g", "*.jsonl", "--", q, ...dirs], { stdout: "pipe", stderr: "ignore" });
+        const timer = setTimeout(() => p.kill(), 5000);
+        const out = await new Response(p.stdout).text();
+        clearTimeout(timer);
+        const found = new Set(out.split("\n").filter(Boolean));
+        hits = all.filter((f) => found.has(f.file)).map((f) => f.file);
+      } catch { hits = null; }
+    }
+    if (!hits) {
+      hits = [];
+      let budget = SCAN_BYTES;
+      for (const f of all.slice(0, SCAN_FILES)) {
+        if ((budget -= f.size) < 0) break;
+        try { if (readFileSync(f.file, "utf8").toLowerCase().includes(needle)) hits.push(f.file); } catch {}
+      }
+    }
+    const known = o.known(), out: (HistEntry & { snippet: string })[] = [];
+    const entries = new Map(list(3650, 100_000).map((e) => [e.file, e]));
+    for (const file of hits) {
+      const e = entries.get(file);
+      if (!e || known.has(e.sessionId)) continue;
+      // o trecho sai do texto do arquivo (JSON por linha): tira as marcas de escape pra ficar legível
+      let snippet = "";
+      try {
+        const raw = statSync(file).size <= SNIPPET_BYTES ? readFileSync(file, "utf8") : head(file);
+        const at = raw.toLowerCase().indexOf(needle);
+        if (at >= 0) snippet = raw.slice(Math.max(0, at - 70), at + needle.length + 110).replace(/\\[nrt]/g, " ").replace(/\\"/g, '"').replace(/[{}\[\]]|"\w+":/g, " ").replace(/\s+/g, " ").trim();
+      } catch {}
+      out.push({ ...e, snippet });
+      if (out.length >= max) break;
+    }
+    return out;
+  }
+
+  return { list, counts, toConvo, search };
 }

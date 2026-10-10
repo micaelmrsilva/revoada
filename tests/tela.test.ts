@@ -38,7 +38,7 @@ const key = (k: string) => `document.querySelector("#prompt").focus(); document.
 
 describe.skipIf(!CHROME)("tela", () => {
   beforeAll(async () => {
-    env = await sobe(5200 + Math.floor(Math.random() * 90)); // 5000 e 7000 são do AirPlay no macOS
+    env = await sobe();
     profile = mkdtempSync(join(tmpdir(), "revoada-chrome-"));
     chrome = Bun.spawn([CHROME!, "--headless=new", "--remote-debugging-port=0", `--user-data-dir=${profile}`, "--no-first-run", "--no-default-browser-check", "--disable-gpu", "--no-sandbox", "--window-size=1280,860", "about:blank"], { stdout: "ignore", stderr: "pipe" });
     // o Chrome avisa no erro padrão em que endereço atende o protocolo de depuração
@@ -164,7 +164,7 @@ describe.skipIf(!CHROME)("tela", () => {
     await page(`go({ type: "chat", id: "${id}" });`);
     await until(`chat && chat.id === "${id}" && chat.suggest && document.querySelector("#prompt").placeholder === chat.suggest`);
     expect(await page(`return [document.querySelector("#prompt").placeholder, document.querySelector("#notes").textContent, [...document.querySelectorAll("#chActs button")].map((b) => b.textContent)]`))
-      .toEqual(["roda os testes agora", "sugestão · Tab aceita · Enter envia", ["Mudanças", "Revisar", "Segurança"]]);
+      .toEqual(["roda os testes agora", "sugestão · Tab aceita · Enter envia", ["Plano", "Mudanças", "Revisar", "Segurança"]]);
     await page(key("Tab"));
     expect(await page(`return document.querySelector("#prompt").value`)).toBe("roda os testes agora");
     // começou a escrever outra coisa: a sugestão sai da frente
@@ -288,6 +288,96 @@ describe.skipIf(!CHROME)("tela", () => {
     expect(use.rows[1]).toMatch(/^Limite de sessão \| Reinicia em (5\d|60|1 h 0) min 42%$/);
     expect(use.rows[2]).toMatch(/^Semanal · todos os modelos \| Reinicia (em 23 h \d+ min|\S+,? \d\d:\d\d) 10%$/);
     await page(`closePops(); localStorage.removeItem("models"); for (const k of Object.keys(choice)) delete choice[k];`);
+  }, SLOW);
+
+  test("quadro: tarefa escrita vira cartão, começa ao arrastar, anda sozinha para revisar e abre a conversa", async () => {
+    // a tarefa vai para uma conta do Codex, pra a revisão cair em outro provedor
+    const reserva = (await env.api("accounts", "POST", { provider: "codex", label: "reserva" })).id;
+    await env.api("state?refresh=1");
+    await page(`await refresh(true); picked.clear(); picked.add("${reserva}"); setCwd("${env.repo}"); go({ type: "board" }); const t = document.querySelector("#boardText"); t.value = "CRIA-ARQUIVO do quadro\\nsó uma conversa"; document.querySelector("#boardAdd").click();`);
+    await until(`document.querySelectorAll('#board [data-col="todo"] .card').length === 2`);
+    expect(await page(`return [...document.querySelectorAll("#board .col")].map((c) => [c.querySelector("h4 span").textContent, c.querySelectorAll(".card").length]).concat([[document.querySelector("#boardCount").textContent, document.querySelector("#boardText").value]])`))
+      .toEqual([["A fazer", 2], ["Fazendo", 0], ["Revisar", 0], ["Feito", 0], ["2", ""]]);
+    // arrastar o primeiro cartão para "Fazendo" começa a tarefa
+    await page(`const card = document.querySelector('#board [data-col="todo"] .card'), col = document.querySelector('#board [data-col="doing"]'), dt = new DataTransfer();
+      card.dispatchEvent(new DragEvent("dragstart", { bubbles: true, dataTransfer: dt })); col.dispatchEvent(new DragEvent("dragover", { bubbles: true, cancelable: true, dataTransfer: dt }));
+      col.dispatchEvent(new DragEvent("drop", { bubbles: true, cancelable: true, dataTransfer: dt })); card.dispatchEvent(new DragEvent("dragend", { bubbles: true, dataTransfer: dt }));`);
+    // sem ninguém mexer, ele sai de "Fazendo" e chega em "Revisar" (depois da revisão por outra conta)
+    await until(`document.querySelector('#board [data-col="review"] [data-card-done]')`, 25_000);
+    const cards = await env.api("board");
+    const first = cards.find((c: any) => c.title === "CRIA-ARQUIVO do quadro");
+    expect([first.state, cards.find((c: any) => c.title === "só uma conversa").state]).toEqual(["review", "todo"]);
+    expect((await env.api(`convos/${first.convo}`)).messages.at(-1).review).toBe(true);
+    // marcar como feito, e o cartão abre a conversa dele
+    await page(`document.querySelector('#board [data-col="review"] [data-card-done]').click();`);
+    await until(`document.querySelector('#board [data-col="done"] .card')`);
+    await page(`document.querySelector('#board [data-col="done"] [data-card-open]').click();`);
+    await until(`view.type === "chat" && chat && chat.id === "${first.convo}"`);
+    expect(await page(OVERFLOW)).toMatchObject({ over: 0, scroll: 0 });
+    // o quadro cabe na janela mínima do app (as colunas rolam por dentro, a página não)
+    await cdp("Emulation.setDeviceMetricsOverride", { width: 920, height: 700, deviceScaleFactor: 1, mobile: false });
+    await page(`go({ type: "board" });`);
+    await until(`document.querySelector("#board .col")`);
+    const fits = await page(`return document.documentElement.scrollWidth <= innerWidth && document.querySelector("#boardAdd").getBoundingClientRect().right <= innerWidth`);
+    await cdp("Emulation.setDeviceMetricsOverride", { width: 1280, height: 860, deviceScaleFactor: 1, mobile: false });
+    expect(fits).toBe(true);
+    await page(`picked.clear(); setCwd(S.home);`);
+  }, 60_000);
+
+  test("plano em arquivo: liga pelo cabeçalho, o progresso aparece e o plano abre formatado", async () => {
+    const id = await env.chat("claude-padrao", "tarefa comprida");
+    await env.idle(id);
+    await page(`mode = "edit"; go({ type: "chat", id: "${id}" });`);
+    await until(`chat && chat.id === "${id}" && document.querySelector("#seePlan")`);
+    expect(await page(`return document.querySelector("#seePlan").textContent`)).toBe("Plano");
+    await page(`document.querySelector("#seePlan").click();`);
+    await until(`chat.plan === true`);
+    await page(`const p = document.querySelector("#prompt"); p.value = "segue com o plano"; p.dispatchEvent(new Event("input", { bubbles: true })); ${key("Enter")}`);
+    await env.until(async () => { const x = await env.api(`convos/${id}`); return x.messages.length === 4 && !x.working; });
+    await until(`document.querySelector("#seePlan").textContent === "Plano 0/3"`);
+    await page(`document.querySelector("#seePlan").click();`);
+    await until(`document.querySelector("#planDlg").open && document.querySelector("#planBody li.task")`);
+    expect(await page(`return [document.querySelector("#planSub").textContent.startsWith("0 de 3 passos"), document.querySelectorAll("#planBody li.task").length, !!document.querySelector("#planBody h2")]`)).toEqual([true, 3, true]);
+    await page(`document.querySelector("#planClose").click();`);
+  }, SLOW);
+
+  test("a busca da lateral acha texto de dentro das conversas e abre a conversa certa", async () => {
+    const id = await env.chat("claude-padrao", "o código do cofre é tamanduá-bandeira");
+    await env.idle(id);
+    await page(`await refresh(); const q = document.querySelector("#tq"); q.value = "tamanduá"; q.dispatchEvent(new Event("input", { bubbles: true }));`);
+    await until(`document.querySelector("#threads .item.hit")`);
+    const hit = await page(`const h = document.querySelector("#threads .item.hit"); return [h.dataset.open, h.querySelector("mark").textContent, h.querySelector(".sn").textContent.includes("código do cofre"), [...document.querySelectorAll("#threads h4")].map((x) => x.textContent)]`);
+    expect(hit).toEqual([`chat:${id}`, "tamanduá", true, ["Nenhuma conversa com esse texto no título", "No conteúdo · 1"]]);
+    await page(`document.querySelector("#threads .item.hit").click();`);
+    await until(`view.type === "chat" && view.id === "${id}"`);
+    await page(`const q = document.querySelector("#tq"); q.value = ""; q.dispatchEvent(new Event("input", { bubbles: true }));`);
+  }, SLOW);
+
+  test("modelo automático se escolhe no campo e a resposta mostra o porte; aviso sonoro toca na hora certa", async () => {
+    // sons: troca o motor de áudio por um contador, pra saber o que tocaria
+    await page(`window.played = []; const real = tone; tone = (notes) => { played.push(notes.length); return true; }; for (const k of Object.keys(choice)) delete choice[k]; mode = "edit"; go({ type: "home" });`);
+    await page(`picked.clear(); picked.add("claude-padrao"); paintComposer(); document.querySelector("#modelChip").click();`);
+    expect(await page(`return [...document.querySelectorAll("#popModel [data-model]")].map((b) => b.textContent)`)).toEqual(["Padrão da conta", "Automático", "Fable", "Opus", "Sonnet", "Haiku"]);
+    await page(`document.querySelector('#popModel [data-model="auto"]').click(); closePops(); const p = document.querySelector("#prompt"); p.value = "roda os testes"; p.dispatchEvent(new Event("input", { bubbles: true })); ${key("Enter")}`);
+    await until(`view.type === "chat" && chat && !chat.working && document.querySelector("#msgs .mdl")`);
+    expect(await page(`return [document.querySelector("#modelChip .lb").textContent, document.querySelector("#msgs .mdl").textContent]`)).toEqual(["Automático", "haiku-teste · auto leve"]);
+    // resposta rápida com a janela em foco não toca; pedido de permissão toca sempre, com o som de três notas
+    await page(`await refresh(); await refresh();`);
+    const quiet = await page(`return played.length`);
+    const asking = await env.chat("claude-padrao", "crie o arquivo", { mode: "ask" });
+    await env.until(async () => (await env.api(`convos/${asking}`)).waiting);
+    await page(`await refresh();`);
+    expect([quiet, await page(`return played`)]).toEqual([0, [3]]);
+    // desligado em Ajustes, não toca
+    await env.api("settings", "POST", { sound: false });
+    await env.api(`convos/${asking}/stop`, "POST", {});
+    const again = await env.chat("claude-padrao", "crie o arquivo", { mode: "ask" });
+    await env.until(async () => (await env.api(`convos/${again}`)).waiting);
+    await page(`await refresh();`);
+    expect(await page(`return played`)).toEqual([3]);
+    await env.api("settings", "POST", { sound: true });
+    await env.api(`convos/${again}/stop`, "POST", {});
+    await page(`for (const k of Object.keys(choice)) delete choice[k]; localStorage.removeItem("models");`);
   }, SLOW);
 
   test("Esc nega, e o cartão de negado com comando comprido não alarga a conversa", async () => {
