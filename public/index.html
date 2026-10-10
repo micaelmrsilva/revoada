@@ -27,7 +27,9 @@
   }
   * { box-sizing: border-box; }
   html, body { height: 100%; margin: 0; }
-  body { background: var(--bg); color: var(--text); font: 14px/1.5 "Geist", -apple-system, system-ui, sans-serif; display: grid; grid-template-columns: 276px 1fr; overflow: hidden; -webkit-font-smoothing: antialiased; }
+  body { background: var(--bg); color: var(--text); font: 14px/1.5 "Geist", -apple-system, system-ui, sans-serif; display: grid; grid-template-columns: 276px minmax(0, 1fr); overflow: hidden; -webkit-font-smoothing: antialiased; }
+  /* janela estreita (painel aberto num navegador, lado a lado com outra coisa): a lateral cede espaço */
+  @media (max-width: 820px) { body { grid-template-columns: 208px minmax(0, 1fr); } }
   button, input, textarea { font: inherit; color: inherit; }
   button { cursor: pointer; background: none; border: 0; padding: 0; text-align: left; }
   button:disabled { opacity: .4; cursor: default; }
@@ -115,7 +117,7 @@
   .hero h1 { font-size: 27px; font-weight: 500; letter-spacing: -.02em; margin: 0; }
   .hero h1 button { border-bottom: 1.5px dotted var(--faint); font-weight: 500; }
   .hero h1 button:hover { border-color: var(--text); }
-  .composer { width: min(760px, calc(100% - 48px)); margin: 0 auto 26px; position: relative; display: none; flex: none; }
+  .composer { width: min(760px, calc(100% - 48px)); margin: 0 auto 26px; position: relative; display: none; flex: none; container-type: inline-size; }
   .composer.on { display: block; }
   .strip { display: flex; gap: 6px; align-items: center; padding: 0 16px; height: 38px; background: var(--side); border: 1px solid var(--line); border-bottom: 0; border-radius: 16px 16px 0 0; margin: 0 12px; color: var(--mute); font-size: 13px; }
   .chip { display: inline-flex; align-items: center; gap: 7px; padding: 4px 9px; border-radius: 8px; color: var(--mute); font-size: 13px; white-space: nowrap; }
@@ -126,7 +128,10 @@
   .box { background: var(--bg); border: 1px solid var(--line); border-radius: 20px; box-shadow: var(--shadow); padding: 14px 14px 10px 18px; }
   .box:focus-within { border-color: var(--faint); }
   .box textarea { border: 0; padding: 2px 0 8px; resize: none; font-size: 15.5px; line-height: 1.5; min-height: 48px; max-height: 240px; background: none; display: block; }
-  .box .row { display: flex; align-items: center; gap: 4px; }
+  .box .row { display: flex; align-items: center; gap: 4px; min-width: 0; }
+  .box .row .chip { flex: none; } .box .row #targetChip { flex: 0 1 auto; min-width: 0; } #targetChip .lb { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  /* campo apertado: os botões ficam só com o ícone (o nome continua na dica) e a conta encolhe com reticências */
+  @container (max-width: 540px) { .box .row .chip:not(#targetChip) .lb { display: none; } #termChip { display: none !important; } .box { padding-left: 12px; } }
   .box .row .sp { flex: 1; }
   .send { width: 34px; height: 34px; border-radius: 50%; background: var(--ink); color: var(--on-ink); display: grid; place-items: center; margin-left: 6px; }
   .pop { position: absolute; background: var(--bg); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow); padding: 8px; z-index: 5; min-width: 300px; max-height: 420px; overflow-y: auto; display: none; }
@@ -681,14 +686,15 @@ function paintComposer() {
   $("dirChip").disabled = inChat;
   $("prompt").placeholder = !inChat ? "Peça qualquer coisa" : chat?.waiting ? "Enter permite, Esc nega. Ou escreva a próxima mensagem" : busy ? "Escreva a próxima: entra quando o agente terminar" : "Responder";
   const ts = targets();
-  $("targetChip").innerHTML = `${esc(!ts.length ? "Nenhuma conta pronta" : ts.length === 1 ? targetName(ts[0]) : `${ts.length} contas em paralelo`)}${ICON.down}`;
-  $("brainChip").innerHTML = `${ICON.brain}Cérebro`; $("brainChip").classList.toggle("on", useBrain);
-  $("modeChip").innerHTML = `${ICON.edit}${MODES[mode]}`; $("modeChip").classList.toggle("on", mode !== "read"); $("modeChip").title = MODE_HINT[mode] + " Clique para trocar.";
+  const who = !ts.length ? "Nenhuma conta pronta" : ts.length === 1 ? targetName(ts[0]) : `${ts.length} contas em paralelo`;
+  $("targetChip").innerHTML = `<span class="lb">${esc(who)}</span>${ICON.down}`; $("targetChip").title = who;
+  $("brainChip").innerHTML = `${ICON.brain}<span class="lb">Cérebro</span>`; $("brainChip").classList.toggle("on", useBrain);
+  $("modeChip").innerHTML = `${ICON.edit}<span class="lb">${MODES[mode]}</span>`; $("modeChip").classList.toggle("on", mode !== "read"); $("modeChip").title = MODE_HINT[mode] + " Clique para trocar.";
   $("attChip").style.display = ts.length > 1 || terminal ? "none" : "inline-flex";
   if (!inChat && repo.cwd !== cwd()) { repo = { cwd: cwd(), repo: false, busy: false }; api("repo?cwd=" + encodeURIComponent(cwd())).then((r) => { if (repo.cwd === cwd()) { repo = { cwd: cwd(), ...r }; paintComposer(); } }).catch(() => {}); }
   const iso = willIsolate(ts);
   $("isoChip").style.display = !inChat && repo.repo && !terminal ? "inline-flex" : "none";
-  $("isoChip").innerHTML = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="5" r="2.2"/><circle cx="6" cy="19" r="2.2"/><circle cx="18" cy="9" r="2.2"/><path d="M6 7.2v9.6M18 11.2c0 4-6 3-12 5.6"/></svg>Cópia isolada`;
+  $("isoChip").innerHTML = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="5" r="2.2"/><circle cx="6" cy="19" r="2.2"/><circle cx="18" cy="9" r="2.2"/><path d="M6 7.2v9.6M18 11.2c0 4-6 3-12 5.6"/></svg><span class="lb">Cópia isolada</span>`;
   $("isoChip").classList.toggle("on", iso);
   $("termChip").style.display = !inChat && ts.length === 1 ? "inline-flex" : "none";
   $("termChip").textContent = "Terminal"; $("termChip").classList.toggle("on", terminal);

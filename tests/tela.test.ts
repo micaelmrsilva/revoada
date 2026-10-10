@@ -120,6 +120,33 @@ describe.skipIf(!CHROME)("tela", () => {
     expect([small.fits, small.header, small.page]).toEqual([true, true, true]);
   }, SLOW);
 
+  test("janela estreita (até 600 de largura): nada sai da tela, na conversa e no início", async () => {
+    const id = await env.chat("claude-padrao", "DEMO-RICA: estreita");
+    await env.idle(id);
+    // tudo o que estiver visível e passar da borda direita da janela
+    const leak = `return { doc: document.documentElement.scrollWidth - innerWidth, out: [...document.querySelectorAll("body *")].filter((e) => { const r = e.getBoundingClientRect(); return r.width && r.height && r.right > innerWidth + 1 && !e.closest("dialog, .pop, #toast"); }).slice(0, 6).map((e) => e.tagName + "#" + e.id) };`;
+    try {
+      for (const width of [900, 760, 600]) {
+        await cdp("Emulation.setDeviceMetricsOverride", { width, height: 720, deviceScaleFactor: 1, mobile: false });
+        await page(`go({ type: "chat", id: "${id}" });`);
+        await until(`chat && chat.id === "${id}" && document.querySelector("#msgs table")`);
+        await Bun.sleep(120);
+        expect([width, "conversa", await page(leak)]).toEqual([width, "conversa", { doc: 0, out: [] }]);
+        // tabela e bloco de código têm rolagem própria quando não cabem; fora deles nada passa da coluna
+        expect(await page(`const w = document.querySelector("#msgs"), edge = w.getBoundingClientRect().right;
+          return { over: Math.round(Math.max(0, ...[...w.querySelectorAll("*")].filter((e) => !e.closest(".tbl table, pre code")).map((e) => e.getBoundingClientRect().right - edge))), scroll: document.querySelector("#chatScroll").scrollWidth - document.querySelector("#chatScroll").clientWidth };`)).toEqual({ over: 0, scroll: 0 });
+        await page(`go({ type: "home" });`);
+        await Bun.sleep(120);
+        expect([width, "início", await page(leak)]).toEqual([width, "início", { doc: 0, out: [] }]);
+      }
+      // apertado, os botões do campo ficam só com o ícone e a conta continua legível
+      const row = await page(`go({ type: "chat", id: "${id}" }); await new Promise((r) => setTimeout(r, 200)); const v = (q) => { const e = document.querySelector(q); return !!e && e.getBoundingClientRect().width > 0; };
+        return { rotulo: v("#brainChip .lb"), icone: v("#brainChip svg"), conta: document.querySelector("#targetChip .lb").getBoundingClientRect().width > 40, enviar: v("#send") };`);
+      expect(row).toEqual({ rotulo: false, icone: true, conta: true, enviar: true });
+    } finally { await cdp("Emulation.setDeviceMetricsOverride", { width: 1280, height: 860, deviceScaleFactor: 1, mobile: false }); }
+    expect(await page(`return document.querySelector("#brainChip .lb").getBoundingClientRect().width > 0`)).toBe(true); // na largura normal o nome volta
+  }, SLOW);
+
   test("Esc nega, e o cartão de negado com comando comprido não alarga a conversa", async () => {
     const id = await env.chat("claude-padrao", "DEMO-RICA: nega esta", { mode: "ask" });
     await page(`go({ type: "chat", id: "${id}" });`);
@@ -162,6 +189,17 @@ describe.skipIf(!CHROME)("tela", () => {
     const run = Bun.spawnSync(["swift", join(import.meta.dir, "webkit.swift"), env.origin, js], { stdout: "pipe", stderr: "pipe" });
     if (run.exitCode !== 0) throw new Error(run.stderr.toString().slice(-800));
     expect(JSON.parse(run.stdout.toString())).toEqual({ rica: [0, 0, 760], negada: [0, 0, 760], pasta: true, live: 1, webkit: true });
+    // e com a janela em 600 de largura: nada passa da borda, e os botões do campo ficam só com o ícone
+    const narrow = Bun.spawnSync(["swift", join(import.meta.dir, "webkit.swift"), env.origin, `
+      const wait = async (f) => { for (let i = 0; i < 200; i++) { const v = f(); if (v) return v; await new Promise((r) => setTimeout(r, 60)); } throw new Error("esperei demais"); };
+      await wait(() => typeof go === "function" && typeof S === "object" && S && S.accounts);
+      go({ type: "chat", id: "${rica}" });
+      await wait(() => chat && chat.id === "${rica}" && document.querySelector("#msgs table"));
+      await new Promise((r) => setTimeout(r, 200));
+      const out = [...document.querySelectorAll("body *")].filter((e) => { const r = e.getBoundingClientRect(); return r.width && r.height && r.right > innerWidth + 1 && !e.closest("dialog, .pop, #toast"); }).slice(0, 6).map((e) => e.tagName + "#" + e.id);
+      return JSON.stringify({ width: innerWidth, doc: document.documentElement.scrollWidth - innerWidth, out, rotulo: document.querySelector("#brainChip .lb").getBoundingClientRect().width > 0 });`, "600"], { stdout: "pipe", stderr: "pipe" });
+    if (narrow.exitCode !== 0) throw new Error(narrow.stderr.toString().slice(-800));
+    expect(JSON.parse(narrow.stdout.toString())).toEqual({ width: 600, doc: 0, out: [], rotulo: false });
   }, 90_000);
 
   test("pedido de permissão mostra o comando uma vez; Enter com texto põe na fila, Enter vazio permite", async () => {
