@@ -1,0 +1,326 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Revoada: continue a conversa quando a conta bate no limite</title>
+  <meta name="description" content="Junte suas contas de Claude Code, Codex, Gemini CLI e Grok num app de Mac. Quando uma bate no limite de uso, a próxima assume com o histórico inteiro. Grátis e de código aberto.">
+  <meta name="theme-color" content="#050a0b">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Revoada">
+  <meta property="og:description" content="Quando uma conta bate no limite, a próxima assume com o histórico inteiro, sem você reexplicar nada. Grátis e de código aberto.">
+  <meta property="og:url" content="https://revoada.ararahq.com/">
+  <meta property="og:image" content="https://revoada.ararahq.com/og.jpg">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="Revoada: continue a conversa quando uma conta bate no limite.">
+  <meta property="og:locale" content="pt_BR">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:image" content="https://revoada.ararahq.com/og.jpg">
+  <link rel="canonical" href="https://revoada.ararahq.com/">
+  <link rel="icon" href="favicon.ico" sizes="32x32">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <link rel="preload" as="image" href="img/revoada-capa.webp" type="image/webp">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400..700&family=Geist+Mono:wght@400..500&display=swap">
+  <link rel="stylesheet" href="style.css">
+  <script>document.documentElement.classList.add('js')</script>
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "Revoada",
+    "description": "Junta suas contas de Claude Code, Codex, Gemini CLI e Grok num app de Mac. Quando uma bate no limite de uso, a próxima assume com o histórico inteiro.",
+    "url": "https://revoada.ararahq.com/",
+    "installUrl": "https://revoada.ararahq.com/#instalar",
+    "image": "https://revoada.ararahq.com/og.jpg",
+    "applicationCategory": "DeveloperApplication",
+    "operatingSystem": "macOS 13 ou mais novo",
+    "processorRequirements": "Apple Silicon",
+    "inLanguage": "pt-BR",
+    "isAccessibleForFree": true,
+    "license": "https://github.com/micaelmrsilva/revoada/blob/main/LICENSE",
+    "offers": { "@type": "Offer", "price": "0", "priceCurrency": "BRL" },
+    "sameAs": "https://github.com/micaelmrsilva/revoada"
+  }
+  </script>
+</head>
+<body>
+  <svg class="sprite" aria-hidden="true" focusable="false">
+    <symbol id="seta" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></symbol>
+    <symbol id="mais" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="som" viewBox="0 0 24 24"><path d="M5 9.5h3l4.5-4v13L8 14.5H5Z"/><path d="M16 9a4.2 4.2 0 0 1 0 6M18.6 6.5a7.8 7.8 0 0 1 0 11"/></symbol>
+    <symbol id="copiar" viewBox="0 0 24 24"><rect x="8.5" y="8.5" width="11.5" height="11.5" rx="2"/><path d="M15.5 8.5V6A2 2 0 0 0 13.5 4H6a2 2 0 0 0-2 2v7.5a2 2 0 0 0 2 2h2.5"/></symbol>
+    <symbol id="logo" viewBox="150 250 720 480"><path d="M240.6 383.8Q288 292.3 351.3 362.4Q404.2 284.1 464 368.2Q405.1 328.2 354.3 405.5Q293.3 336 240.6 383.8Z" fill="currentColor" fill-opacity=".45"/><path class="lider" d="M496.7 466.5Q555.6 316.5 665.4 415.2Q734.8 284.9 841.4 405.8Q743.3 353.3 677.1 481.7Q571 383.6 496.7 466.5Z"/><path d="M164.6 690.3Q280.1 456.9 449.5 626.1Q580 425.4 741.5 629.6Q585.8 535.4 460.8 733.5Q297.3 565.7 164.6 690.3Z" fill="currentColor"/></symbol>
+  </svg>
+
+  <a class="pular" href="#como">Pular para o conteúdo</a>
+
+  <header class="nav" id="nav">
+    <a class="marca" href="#topo" aria-label="Revoada, início"><svg aria-hidden="true"><use href="#logo"/></svg><span>Revoada</span></a>
+    <nav class="links" aria-label="Seções">
+      <a href="#como">Como funciona</a>
+      <a href="#seguranca">Segurança</a>
+      <a href="#agentes">Para agentes</a>
+      <a href="#perguntas">Perguntas</a>
+    </nav>
+    <div class="dir">
+      <a class="entrar" href="https://github.com/micaelmrsilva/revoada" rel="noopener">GitHub</a>
+      <a class="pill" href="#instalar">Instalar</a>
+    </div>
+  </header>
+
+  <main>
+    <section class="capa escura" id="topo" aria-labelledby="titulo">
+      <div class="foto" id="foto-capa" aria-hidden="true"><div class="zoom"><div class="img"></div></div></div>
+      <div class="veu" aria-hidden="true"></div>
+      <div class="grao" aria-hidden="true"></div>
+      <div class="capa-meio" id="capa-meio">
+        <h1 class="titulo" id="titulo" aria-label="Continue a conversa"><span class="ln" style="--i:0"><span>Continue</span></span> <span class="ln" style="--i:1"><span>a conversa</span></span></h1>
+        <p class="quem-capa sobe" style="--d:650ms">quando <span id="quem">uma conta bate no limite.</span></p>
+      </div>
+      <div class="capa-base sobe" style="--d:800ms">
+        <div>
+          <p class="sub">Junte suas contas de Claude Code, Codex, Gemini CLI e Grok num app de Mac. Quando uma bate no limite, a próxima assume com o histórico inteiro, sem você reexplicar nada.</p>
+        </div>
+        <div>
+          <div class="acoes">
+            <a class="btn" href="#instalar">Instalar em 4 comandos <svg aria-hidden="true"><use href="#seta"/></svg></a>
+            <a class="sub-elo" href="https://github.com/micaelmrsilva/revoada" rel="noopener">Ver no GitHub</a>
+          </div>
+          <p class="nota">Grátis e de código aberto. Para macOS 13 ou mais novo, com Apple Silicon. O login é sempre o do CLI oficial.</p>
+        </div>
+      </div>
+    </section>
+
+    <div class="folha">
+      <section class="secao como clara" id="como" aria-labelledby="como-titulo">
+        <div class="w">
+          <h2 class="so-leitor" id="como-titulo">Como funciona</h2>
+
+          <article class="cap compara">
+            <h3 class="quem"><span class="m">Quando</span> uma conta bate no limite.</h3>
+            <p class="exemplo">Conversas de exemplo</p>
+            <div class="duas-fitas">
+              <figure class="cena antes">
+                <figcaption>Fora do app, trocando de conta na mão</figcaption>
+                <ol class="fita" aria-label="Exemplo: fora do app, trocando de conta na mão">
+                  <li class="fala" style="--r:0"><time>14:05</time><b>Claude</b><p>Troquei o cliente em <code>src/pagamento</code>. Falta o checkout.</p></li>
+                  <li class="fala fato limite" style="--r:1"><time>14:05</time><b></b><p>Limite de uso atingido. A janela renova às 19:00.</p></li>
+                  <li class="fala fato" style="--r:2"><time>14:06</time><b></b><p>Você sai da conta, entra na outra e cola o contexto de novo.</p></li>
+                  <li class="fala" style="--r:3"><time>14:21</time><b>Claude</b><p>Pode me explicar o que já foi feito?</p></li>
+                  <li class="fala volta" style="--r:4"><time></time><b></b><p>Parado por <strong class="perda">16 minutos</strong></p></li>
+                </ol>
+              </figure>
+              <figure class="cena depois">
+                <figcaption>No app, com o rodízio automático</figcaption>
+                <ol class="fita" aria-label="Exemplo: no app, com o rodízio automático">
+                  <li class="fala" style="--r:0"><time>14:05</time><b class="agente">Claude · pessoal</b><p>Troquei o cliente em <code>src/pagamento</code>. Falta o checkout.</p></li>
+                  <li class="fala fato limite" style="--r:1"><time>14:05</time><b></b><p>Claude · pessoal bateu no limite. Continuando em Claude · trabalho, com a conversa.</p></li>
+                  <li class="fala" style="--r:2"><time>14:05</time><b class="agente">Claude · trabalho</b><p>Continuando do checkout. Rodei os testes: 42 passaram.</p></li>
+                  <li class="fala volta" style="--r:3"><time></time><b></b><p>Seguiu no <strong>mesmo minuto</strong></p></li>
+                </ol>
+              </figure>
+            </div>
+            <div class="compara-pe">
+              <p class="vira"><span class="fr">O pedido segue na próxima conta,</span> <span class="fr">com tudo o que já foi dito e feito.</span></p>
+              <div>
+                <p>O rodízio começa pela conta mais folgada do mesmo provedor e leva o histórico junto. Dentro do app, trocar de agente à mão também leva, até de um provedor para outro.</p>
+                <div class="acoes">
+                  <a class="btn" href="#instalar">Instalar em 4 comandos <svg aria-hidden="true"><use href="#seta"/></svg></a>
+                  <a class="sub-elo" href="https://github.com/micaelmrsilva/revoada" rel="noopener">Ver no GitHub</a>
+                </div>
+              </div>
+            </div>
+          </article>
+
+          <article class="cap">
+            <h3 class="quem"><span class="m">Quando</span> a tarefa é grande.</h3>
+            <div class="cap-corpo">
+              <div class="cap-texto">
+                <p class="vira"><span class="fr">Vários agentes ao mesmo tempo,</span> <span class="fr">cada um na sua cópia.</span></p>
+                <p>Despeje as tarefas no quadro, uma por linha. Cada cartão vira um agente num <code>git worktree</code> próprio, que some sozinho quando o trabalho vira PR. Antes, uma conta de outro provedor revisa sem poder editar: outro modelo erra em lugares diferentes.</p>
+              </div>
+              <figure class="cena">
+                <figcaption>Quadro de exemplo</figcaption>
+                <ol class="fita" aria-label="Quadro de exemplo">
+                  <li class="fala" style="--r:0"><time>15:10</time><b>Você</b><p>paginação nos pedidos, exportar CSV, corrigir o fuso do relatório</p></li>
+                  <li class="fala fato" style="--r:1"><time>15:10</time><b></b><p>Três cartões, três agentes, cada um na sua cópia do repositório.</p></li>
+                  <li class="fala" style="--r:2"><time>15:31</time><b class="agente">Codex · pessoal</b><p>Revisei a paginação: um achado, mandei de volta.</p></li>
+                  <li class="fala" style="--r:3"><time>15:34</time><b class="agente">Claude · trabalho</b><p>Corrigido. Os três branches estão prontos.</p></li>
+                  <li class="fala volta" style="--r:4"><time></time><b></b><p>Três branches juntos, <strong>61 testes</strong> passando</p></li>
+                </ol>
+              </figure>
+            </div>
+          </article>
+
+          <article class="cap">
+            <h3 class="quem"><span class="m">Quando</span> você sai do computador.</h3>
+            <div class="cap-corpo">
+              <div class="cap-texto">
+                <p class="vira"><span class="fr">Ela agenda, segura o Mac acordado</span> <span class="fr">e te chama quando precisa.</span></p>
+                <p>“Roda isso às 3h” vira uma conversa nova na hora marcada. O Mac fica acordado enquanto há agente trabalhando, e só enquanto. Um som avisa quando terminou e outro quando o agente precisa de você.</p>
+                <div class="opcoes" role="group" aria-label="Ouvir os avisos do app">
+                  <button type="button" data-som="done"><svg aria-hidden="true"><use href="#som"/></svg>Ouvir: terminou</button>
+                  <button type="button" data-som="ask"><svg aria-hidden="true"><use href="#som"/></svg>Ouvir: precisa de você</button>
+                </div>
+              </div>
+              <figure class="cena">
+                <figcaption>Madrugada de exemplo</figcaption>
+                <ol class="fita" aria-label="Madrugada de exemplo">
+                  <li class="fala" style="--r:0"><time>03:00</time><b class="agente">Agendado</b><p>Roda a suíte inteira e abre um PR com o que quebrou.</p></li>
+                  <li class="fala fato" style="--r:1"><time>03:00</time><b></b><p>O Mac segue acordado enquanto o agente trabalha.</p></li>
+                  <li class="fala" style="--r:2"><time>03:41</time><b class="agente">Codex · pessoal</b><p>Dois testes quebraram. Abri o PR com o conserto.</p></li>
+                  <li class="fala fato" style="--r:3"><time>03:41</time><b></b><p>O Mac toca o som de terminou.</p></li>
+                  <li class="fala volta" style="--r:4"><time></time><b></b><p>PR aberto às <strong>03:41</strong></p></li>
+                </ol>
+              </figure>
+            </div>
+          </article>
+
+          <p class="tambem">E tem um cérebro compartilhado: um cofre do Obsidian com a memória de todos os agentes, entregue como contexto em qualquer conta.</p>
+        </div>
+      </section>
+
+      <section class="prancha confia escura" id="seguranca" aria-labelledby="seguranca-titulo">
+        <div class="foto" aria-hidden="true" style="--img:var(--revoada-v)"><div class="img"></div></div>
+        <div class="veu" aria-hidden="true"></div>
+        <div class="grao" aria-hidden="true"></div>
+        <div class="w">
+          <h2 id="seguranca-titulo">Nenhum token dos provedores passa pelo app.</h2>
+          <p class="lead">O login é sempre o do CLI oficial de cada provedor, e tudo roda no seu Mac.</p>
+          <div class="fatos">
+            <p class="oque">Uma conta, um perfil isolado.<small>Cada conta usa a configuração própria do CLI. O app não copia token, não faz proxy de assinatura e não fala com a API por conta própria.</small></p>
+            <p class="oque">Só no seu Mac.<small>O painel escuta em 127.0.0.1 e recusa chamada de outra origem. O acesso pelo celular, desligado por padrão, usa uma segunda porta na sua rede.</small></p>
+            <p class="oque">Código aberto.<small>Licença MIT, com os testes rodando a cada push. Dá para ler cada linha antes de confiar.</small></p>
+          </div>
+          <a class="elo" href="https://github.com/micaelmrsilva/revoada#segurança" rel="noopener">Ler a seção de segurança <svg aria-hidden="true"><use href="#seta"/></svg></a>
+        </div>
+      </section>
+
+      <section class="secao agentes clara" id="agentes" aria-labelledby="agentes-titulo">
+        <div class="w">
+          <article class="cap unica">
+            <h2 class="quem" id="agentes-titulo"><span class="m">Claude, Codex, Gemini e Grok.</span> Numa conversa só.</h2>
+            <div class="cap-corpo">
+              <div class="cap-texto">
+                <p class="vira"><span class="fr">Troque de agente no meio da conversa.</span> <span class="fr">O histórico vai junto.</span></p>
+                <p>Passe do Claude para o Codex quando quiser. Skills e servidores MCP da conta padrão passam a valer nas outras, e você vê quanto cada conta já usou das janelas de cinco horas e de sete dias.</p>
+                <dl class="portas">
+                  <div><dt>Seus agentes também usam.</dt><dd>Toda conversa com o Claude ou o Codex ganha uma ponte MCP com nove ferramentas: criar tarefa no quadro, delegar a outra conta, pedir revisão e agendar. Com limite por conversa e sem delegação em cadeia.</dd></div>
+                  <div><dt>Linha de comando.</dt><dd>O comando <code>revoada</code> pede, cria tarefa e lê conversas a partir de scripts e agentes de fora, com saída em JSON e códigos de saída estáveis.</dd></div>
+                </dl>
+                <a class="elo" href="https://github.com/micaelmrsilva/revoada#para-agentes" rel="noopener">Ver a documentação <svg aria-hidden="true"><use href="#seta"/></svg></a>
+              </div>
+              <figure class="cena">
+                <figcaption>Conversa de exemplo</figcaption>
+                <ol class="fita" aria-label="Conversa de exemplo">
+                  <li class="fala" style="--r:0"><time>16:20</time><b class="agente">Claude · trabalho</b><p>Vou passar os testes do exportador pro Codex.</p></li>
+                  <li class="fala fato" style="--r:1"><time>16:20</time><b></b><p>Abre a conversa no Codex e devolve o id.</p></li>
+                  <li class="fala" style="--r:2"><time>16:34</time><b class="agente">Codex · pessoal</b><p>Escrevi 12 testes. Todos passam.</p></li>
+                  <li class="fala fato" style="--r:3"><time>16:34</time><b></b><p>Outra conta lê o que mudou, sem poder editar.</p></li>
+                  <li class="fala volta" style="--r:4"><time></time><b></b><p>Revisado por outra conta <strong>antes de voltar</strong></p></li>
+                </ol>
+              </figure>
+            </div>
+          </article>
+          <p class="comandos" aria-hidden="true"><code>revoada pedir "roda os testes" --esperar</code><code>revoada tarefa "ajustar o rodapé" --comecar</code><code>revoada conversa &lt;id&gt; --json</code></p>
+        </div>
+      </section>
+
+      <section class="secao perguntas clara" id="perguntas" aria-labelledby="perguntas-titulo">
+        <div class="w">
+          <div>
+            <h2 class="h2" id="perguntas-titulo">Antes de pôr a Revoada pra voar.</h2>
+            <a class="elo" href="https://github.com/micaelmrsilva/revoada#readme" rel="noopener">Ler o README <svg aria-hidden="true"><use href="#seta"/></svg></a>
+          </div>
+          <div>
+            <details>
+              <summary>Isso fere os termos dos provedores?<svg aria-hidden="true"><use href="#mais"/></svg></summary>
+              <p>O app usa o login de cada CLI oficial, sem copiar token nem fazer proxy de assinatura. Mas usar várias contas pode ter regras próprias em cada provedor: leia os termos de uso de cada um.</p>
+            </details>
+            <details>
+              <summary>Preciso de mais de uma conta?<svg aria-hidden="true"><use href="#mais"/></svg></summary>
+              <p>Não. Com uma conta você já tem a conversa com cada passo à vista, o quadro, os agendamentos e o cérebro. O rodízio entra quando você logar a segunda.</p>
+            </details>
+            <details>
+              <summary>Dá trabalho instalar?<svg aria-hidden="true"><use href="#mais"/></svg></summary>
+              <p>São quatro comandos no Terminal, com o Bun e as ferramentas de linha de comando do Xcode instalados. O último roda os testes e monta o app. Depois, cada conta entra pelo login do CLI dela.</p>
+            </details>
+            <details>
+              <summary>Funciona com o Gemini e o Grok?<svg aria-hidden="true"><use href="#mais"/></svg></summary>
+              <p>Funciona, com limites. Aprovação por ação e texto ao vivo só no Claude. As ferramentas para agentes só no Claude e no Codex. O Grok responde como texto único.</p>
+            </details>
+            <details>
+              <summary>E no Windows ou no Linux?<svg aria-hidden="true"><use href="#mais"/></svg></summary>
+              <p>O app é só para macOS 13 ou mais novo com Apple Silicon. O servidor roda em Linux, onde os testes rodam, mas sem a janela nativa.</p>
+            </details>
+            <details>
+              <summary>Quanto custa?<svg aria-hidden="true"><use href="#mais"/></svg></summary>
+              <p>Nada. É código aberto, licença MIT. Você continua pagando só os planos que já tem com cada provedor.</p>
+            </details>
+          </div>
+        </div>
+      </section>
+
+      <section class="prancha fecho escura" id="instalar" aria-labelledby="instalar-titulo">
+        <div class="foto" aria-hidden="true"><div class="img"></div></div>
+        <div class="veu" aria-hidden="true"></div>
+        <div class="grao" aria-hidden="true"></div>
+        <div class="w">
+          <h2 id="instalar-titulo">Bateu no limite? Continue a conversa.</h2>
+          <p class="lead">Quatro comandos no Terminal. Depois, logue cada conta pelo CLI oficial e peça como sempre.</p>
+          <div class="comandos-bloco">
+            <div class="comandos-rola"><pre data-comandos><code><span>git clone https://github.com/micaelmrsilva/revoada.git</span>
+<span>cd revoada</span>
+<span>bun install</span>
+<span>bun run app:install</span></code></pre></div>
+            <button type="button" class="copiar" data-copiar><svg aria-hidden="true"><use href="#copiar"/></svg><span data-copiar-texto>Copiar</span></button>
+          </div>
+          <div class="acoes">
+            <a class="btn" href="https://github.com/micaelmrsilva/revoada" rel="noopener">Ver no GitHub <svg aria-hidden="true"><use href="#seta"/></svg></a>
+            <a class="sub-elo" href="https://github.com/micaelmrsilva/revoada#readme" rel="noopener">Ler o README</a>
+          </div>
+          <p class="nota">Precisa de macOS 13 ou mais novo com Apple Silicon, Bun 1.4 ou mais novo, as ferramentas de linha de comando do Xcode e pelo menos um CLI logado. O último comando roda os testes, monta o Revoada.app e copia para Aplicativos.</p>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <footer class="rodape">
+    <div class="w colunas">
+      <div class="marca">
+        <svg aria-hidden="true"><use href="#logo"/></svg>
+        <p>Junta suas contas de agentes de código num app de Mac, e a conversa continua quando uma bate no limite.</p>
+      </div>
+      <div>
+        <h3>Projeto</h3>
+        <ul>
+          <li><a href="https://github.com/micaelmrsilva/revoada" rel="noopener">GitHub</a></li>
+          <li><a href="https://github.com/micaelmrsilva/revoada#readme" rel="noopener">README</a></li>
+          <li><a href="https://github.com/micaelmrsilva/revoada/blob/main/CONTRIBUTING.md" rel="noopener">Contribuir</a></li>
+        </ul>
+      </div>
+      <div>
+        <h3>Nesta página</h3>
+        <ul>
+          <li><a href="#como">Como funciona</a></li>
+          <li><a href="#seguranca">Segurança</a></li>
+          <li><a href="#agentes">Para agentes</a></li>
+          <li><a href="#perguntas">Perguntas</a></li>
+        </ul>
+      </div>
+    </div>
+    <div class="w">
+      <div class="legal">
+        <span>Revoada não é afiliada à Anthropic, OpenAI, Google ou xAI. Os nomes dos produtos pertencem aos respectivos donos.</span>
+        <ul><li><a href="https://github.com/micaelmrsilva/revoada/blob/main/LICENSE" rel="noopener">Licença MIT</a></li></ul>
+      </div>
+    </div>
+  </footer>
+
+  <script src="main.js" defer></script>
+</body>
+</html>

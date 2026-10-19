@@ -1,0 +1,16 @@
+// Página do projeto, servida pela Cloudflare como Worker de arquivos estáticos (o mesmo jeito do micaelm.com).
+// Deploy: npx wrangler deploy, de dentro desta pasta. O domínio próprio cria o DNS e o certificado sozinho.
+{
+  "name": "revoada-site",
+  "compatibility_date": "2026-10-06",
+  // a página mora só no domínio dela; sem endereço workers.dev paralelo
+  "workers_dev": false,
+  "assets": {
+    "directory": ".",
+    // endereço que não existe recebe a 404.html, com o status 404
+    "not_found_handling": "404-page"
+  },
+  "routes": [
+    { "pattern": "revoada.ararahq.com", "custom_domain": true }
+  ]
+}

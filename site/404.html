@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Página não encontrada · Revoada</title>
+  <meta name="robots" content="noindex">
+  <meta name="theme-color" content="#050a0b">
+  <link rel="icon" href="/favicon.ico" sizes="32x32">
+  <link rel="icon" href="/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400..700&display=swap">
+  <link rel="stylesheet" href="/style.css">
+  <style>
+    /* Endereço que não existe. A Cloudflare serve esta página em qualquer caminho, por isso tudo aqui é absoluto. É a
+       capa da página principal, parada, com a saída de volta para o início e para a instalação. */
+    :root { --revoada: url("/img/revoada-capa.webp"); }
+    .perdida .titulo { font-size: min(14vw, 20vh); }
+    /* cinza opaco: em letra deste tamanho, o translúcido deixa o bando aparecer por dentro */
+    .perdida .titulo .m { color: #a6b3b6; }
+  </style>
+</head>
+<body>
+  <svg class="sprite" aria-hidden="true" focusable="false">
+    <symbol id="seta" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></symbol>
+    <symbol id="logo" viewBox="150 250 720 480"><path d="M240.6 383.8Q288 292.3 351.3 362.4Q404.2 284.1 464 368.2Q405.1 328.2 354.3 405.5Q293.3 336 240.6 383.8Z" fill="currentColor" fill-opacity=".45"/><path class="lider" d="M496.7 466.5Q555.6 316.5 665.4 415.2Q734.8 284.9 841.4 405.8Q743.3 353.3 677.1 481.7Q571 383.6 496.7 466.5Z"/><path d="M164.6 690.3Q280.1 456.9 449.5 626.1Q580 425.4 741.5 629.6Q585.8 535.4 460.8 733.5Q297.3 565.7 164.6 690.3Z" fill="currentColor"/></symbol>
+  </svg>
+
+  <header class="nav">
+    <a class="marca" href="/" aria-label="Revoada, início"><svg aria-hidden="true"><use href="#logo"/></svg><span>Revoada</span></a>
+  </header>
+
+  <main class="capa escura perdida" aria-labelledby="titulo">
+    <div class="foto" aria-hidden="true"><div class="img"></div></div>
+    <div class="veu" aria-hidden="true"></div>
+    <div class="grao" aria-hidden="true"></div>
+    <div class="capa-meio" id="capa-meio">
+      <h1 class="titulo duas" id="titulo"><span class="ln"><span class="m">Essa página</span></span> <span class="ln"><span>saiu do bando.</span></span></h1>
+    </div>
+    <div class="capa-base">
+      <div>
+        <p class="sub">O endereço que você abriu não existe ou mudou de lugar.</p>
+      </div>
+      <div>
+        <div class="acoes">
+          <a class="btn" href="/">Voltar ao início <svg aria-hidden="true"><use href="#seta"/></svg></a>
+          <a class="sub-elo" href="/#instalar">Instalar em 4 comandos</a>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    // o mesmo grão da página principal, e a letra ocupando a largura como na capa dela
+    (() => {
+      const c = document.createElement('canvas');
+      c.width = c.height = 256;
+      const x = c.getContext('2d');
+      if (x) {
+        const d = x.createImageData(256, 256);
+        for (let i = 0; i < d.data.length; i += 4) {
+          const v = Math.random() * 255;
+          d.data[i] = d.data[i + 1] = d.data[i + 2] = v;
+          d.data[i + 3] = Math.random() * 30;
+        }
+        x.putImageData(d, 0, 0);
+        document.documentElement.style.setProperty('--grao', `url(${c.toDataURL()})`);
+      }
+      const titulo = document.getElementById('titulo');
+      const meio = document.getElementById('capa-meio');
+      const ajustar = () => {
+        titulo.style.fontSize = '100px';
+        const largura = Math.max(...[...titulo.querySelectorAll('.ln > span')].map((s) => s.getBoundingClientRect().width));
+        const cabe = ((meio.clientWidth - parseFloat(getComputedStyle(meio).paddingLeft) * 2) / largura) * 100;
+        titulo.style.fontSize = cabe > 0 && isFinite(cabe) ? Math.min(cabe, innerHeight * 0.2).toFixed(1) + 'px' : '';
+      };
+      ajustar();
+      document.fonts.ready.then(ajustar);
+      addEventListener('resize', ajustar);
+    })();
+  </script>
+</body>
+</html>

@@ -1,0 +1,450 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-19T00:21:15.657041+00:00",
+  "title": "Design System: Revoada",
+  "extensions": {
+    "colorMeta": {
+      "noite": {
+        "role": "neutral",
+        "displayName": "Noite",
+        "canonical": "oklch(13.9% 0.010 209)",
+        "tonalRamp": [
+          "#070c0d",
+          "#202628",
+          "#3c4445",
+          "#5b6364",
+          "#7c8485",
+          "#9ea7a8",
+          "#c2cbcc",
+          "#e7f0f2"
+        ]
+      },
+      "ink": {
+        "role": "neutral",
+        "displayName": "Tinta",
+        "canonical": "oklch(16.3% 0.008 211)",
+        "tonalRamp": [
+          "#070c0d",
+          "#212627",
+          "#3d4344",
+          "#5c6364",
+          "#7d8485",
+          "#9fa6a8",
+          "#c3cbcc",
+          "#e9f0f2"
+        ]
+      },
+      "ink-2": {
+        "role": "neutral",
+        "displayName": "Tinta Média",
+        "canonical": "oklch(44.1% 0.020 210)",
+        "tonalRamp": [
+          "#020d10",
+          "#19282b",
+          "#364548",
+          "#546568",
+          "#758689",
+          "#97a9ac",
+          "#bbcdd1",
+          "#e0f3f6"
+        ]
+      },
+      "ink-3": {
+        "role": "neutral",
+        "displayName": "Tinta Clara",
+        "canonical": "oklch(53.5% 0.022 213)",
+        "tonalRamp": [
+          "#020e11",
+          "#18282b",
+          "#344549",
+          "#536569",
+          "#74868a",
+          "#96a9ad",
+          "#bacdd2",
+          "#def3f7"
+        ]
+      },
+      "paper": {
+        "role": "neutral",
+        "displayName": "Papel",
+        "canonical": "oklch(99.0% 0.001 197)",
+        "tonalRamp": [
+          "#0b0b0b",
+          "#242525",
+          "#414242",
+          "#606161",
+          "#818282",
+          "#a4a5a5",
+          "#c8c9c9",
+          "#eeefef"
+        ]
+      },
+      "paper-2": {
+        "role": "neutral",
+        "displayName": "Papel Sombra",
+        "canonical": "oklch(96.7% 0.004 197)",
+        "tonalRamp": [
+          "#090c0c",
+          "#232626",
+          "#3f4343",
+          "#5f6262",
+          "#7f8383",
+          "#a2a6a6",
+          "#c6caca",
+          "#ebefef"
+        ]
+      },
+      "teal": {
+        "role": "primary",
+        "displayName": "Teal Vivo",
+        "canonical": "oklch(62.6% 0.102 207)",
+        "tonalRamp": [
+          "#001220",
+          "#00303e",
+          "#004f5d",
+          "#00717e",
+          "#0e93a1",
+          "#46b7c5",
+          "#6fdceb",
+          "#96ffff"
+        ]
+      },
+      "teal-ink": {
+        "role": "primary",
+        "displayName": "Teal Tinta",
+        "canonical": "oklch(49.7% 0.081 208)",
+        "tonalRamp": [
+          "#00121c",
+          "#002e39",
+          "#004d58",
+          "#106e79",
+          "#3e909b",
+          "#63b3bf",
+          "#88d8e4",
+          "#adfeff"
+        ]
+      },
+      "mint": {
+        "role": "secondary",
+        "displayName": "Menta",
+        "canonical": "oklch(88.2% 0.076 198)",
+        "tonalRamp": [
+          "#001316",
+          "#002f32",
+          "#004e50",
+          "#1b6e71",
+          "#439093",
+          "#68b4b6",
+          "#8cd9db",
+          "#b1ffff"
+        ]
+      },
+      "ambar-ink": {
+        "role": "tertiary",
+        "displayName": "Âmbar Tinta",
+        "canonical": "oklch(50.8% 0.106 73)",
+        "tonalRamp": [
+          "#230000",
+          "#421700",
+          "#633600",
+          "#855600",
+          "#a97730",
+          "#ce9a55",
+          "#f4be79",
+          "#ffe49e"
+        ]
+      },
+      "plate": {
+        "role": "primary",
+        "displayName": "Placa Petróleo",
+        "canonical": "oklch(30.3% 0.044 217)",
+        "tonalRamp": [
+          "#000f17",
+          "#042a33",
+          "#244851",
+          "#446872",
+          "#648994",
+          "#86acb7",
+          "#aad1dc",
+          "#cef7ff"
+        ]
+      },
+      "plate-hover": {
+        "role": "primary",
+        "displayName": "Petróleo Aceso",
+        "canonical": "oklch(40.0% 0.060 213)",
+        "tonalRamp": [
+          "#00101a",
+          "#002c36",
+          "#0f4a55",
+          "#346a76",
+          "#568c98",
+          "#79afbc",
+          "#9cd4e1",
+          "#c1faff"
+        ]
+      },
+      "line": {
+        "role": "neutral",
+        "displayName": "Fio"
+      },
+      "line-2": {
+        "role": "neutral",
+        "displayName": "Fio Forte"
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Display",
+        "purpose": "Só o título da capa, ajustado à largura."
+      },
+      "headline-prancha": {
+        "displayName": "Headline de prancha",
+        "purpose": "Título das pranchas de foto (confiança e fecho)."
+      },
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "Pergunta grande de capítulo."
+      },
+      "headline-secao": {
+        "displayName": "Headline de seção",
+        "purpose": "Título de seção comum no papel."
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "Virada de capítulo e última fala da fita."
+      },
+      "fala": {
+        "displayName": "Fala",
+        "purpose": "Frase dentro da fita."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Parágrafo de apoio, 44 a 46ch."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Hora, falante, legenda e nota."
+      },
+      "mono": {
+        "displayName": "Mono",
+        "purpose": "Comandos de instalação e de linha de comando."
+      }
+    },
+    "shadows": [
+      {
+        "name": "borda-da-folha",
+        "value": "0 -28px 60px -30px rgba(0, 0, 0, 0.55)",
+        "purpose": "Só na folha de papel que sobe sobre a capa."
+      },
+      {
+        "name": "vidro-do-comando",
+        "value": "inset 0 0 0 1px rgba(255, 255, 255, 0.16), 0 30px 60px -36px rgba(0, 0, 0, 0.8)",
+        "purpose": "Bloco de comandos sobre a foto, com backdrop-filter: blur(10px)."
+      },
+      {
+        "name": "fio-da-barra",
+        "value": "0 1px 0 rgba(10, 15, 16, 0.1)",
+        "purpose": "Barra fixa no estado papel."
+      },
+      {
+        "name": "pular",
+        "value": "0 0 0 1px rgba(10, 15, 16, 0.1), 0 14px 30px -14px rgba(10, 15, 16, 0.5)",
+        "purpose": "Link de pular para o conteúdo quando focado."
+      }
+    ],
+    "motion": [
+      {
+        "name": "ease",
+        "value": "cubic-bezier(0.16, 1, 0.3, 1)",
+        "purpose": "Curva única de entrada e de estado."
+      },
+      {
+        "name": "chega",
+        "value": "scale(1.16) para none em 7s",
+        "purpose": "Chegada da foto da capa."
+      },
+      {
+        "name": "respira",
+        "value": "scale(1.045) com leve deslocamento, 28s alternado",
+        "purpose": "Respiração contínua da foto da capa, pausada fora da tela."
+      },
+      {
+        "name": "titulo-sobe",
+        "value": "translateY(135%) para 0 em 1.15s, 110ms por linha",
+        "purpose": "Entrada do título da capa linha a linha."
+      },
+      {
+        "name": "frase-gira",
+        "value": "saída 240ms ease-in com blur 8px, entrada 520ms ease",
+        "purpose": "Frase da capa que passa por três situações e volta à primeira."
+      },
+      {
+        "name": "fala-toca",
+        "value": "opacity, translateY(10px) e blur(4px), 0.5 a 0.55s, intervalo de 0.22s por fala",
+        "purpose": "Fita que toca fala a fala quando o capítulo entra."
+      },
+      {
+        "name": "pergunta-revela",
+        "value": "clip-path de baixo para cima em 1.1s",
+        "purpose": "Entrada da pergunta grande do capítulo."
+      },
+      {
+        "name": "aperto",
+        "value": "scale(0.96) em 0.15s",
+        "purpose": "Active de pílulas e chips."
+      },
+      {
+        "name": "reduzido",
+        "value": "prefers-reduced-motion desliga toda animação e transição",
+        "purpose": "Acessibilidade."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "links-da-barra",
+        "value": "1100px"
+      },
+      {
+        "name": "uma-coluna",
+        "value": "900px"
+      },
+      {
+        "name": "celular",
+        "value": "620px"
+      },
+      {
+        "name": "estreito",
+        "value": "360px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Botão placa",
+      "kind": "button",
+      "refersTo": "button-plate",
+      "description": "Ação principal sobre o papel, uma por bloco.",
+      "html": "<button class=\"ds-btn ds-btn-plate\">Instalar em 4 comandos <svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M5 12h14\"/><path d=\"m12 5 7 7-7 7\"/></svg></button>",
+      "css": ":root{--noite:#050a0b;--ink:#0a0f10;--ink-2:#465659;--ink-3:#5f7175;--paper:#fbfcfc;--line:rgba(10,15,16,.1);--line-2:rgba(10,15,16,.2);--teal:#1c99a7;--teal-ink:#136f7a;--mint:#9be8ea;--ambar-ink:#8a5a06;--plate:#0f343d;--sans:'Geist',ui-sans-serif,system-ui,sans-serif;--mono:'Geist Mono',ui-monospace,Menlo,monospace;--ease:cubic-bezier(0.16,1,0.3,1);} .ds-btn{display:inline-flex;align-items:center;gap:9px;height:52px;padding:0 26px;border:0;border-radius:999px;font:500 1.0625rem var(--sans);cursor:pointer;transition:background-color .15s,transform .15s var(--ease);} .ds-btn svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round;transition:transform .25s var(--ease);} .ds-btn:hover svg{transform:translateX(3px);} .ds-btn:active{transform:scale(.96);} .ds-btn:focus-visible{outline:2px solid var(--teal-ink);outline-offset:3px;} .ds-btn-plate{background:var(--plate);color:#fff;} .ds-btn-plate:hover{background:#17505b;}"
+    },
+    {
+      "name": "Botão sobre a foto",
+      "kind": "button",
+      "refersTo": "button-photo",
+      "description": "Pílula branca, ação principal nas pranchas escuras.",
+      "html": "<div class=\"ds-noite\"><button class=\"ds-btn ds-btn-photo\">Ver no GitHub <svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M5 12h14\"/><path d=\"m12 5 7 7-7 7\"/></svg></button></div>",
+      "css": ":root{--noite:#050a0b;--ink:#0a0f10;--ink-2:#465659;--ink-3:#5f7175;--paper:#fbfcfc;--line:rgba(10,15,16,.1);--line-2:rgba(10,15,16,.2);--teal:#1c99a7;--teal-ink:#136f7a;--mint:#9be8ea;--ambar-ink:#8a5a06;--plate:#0f343d;--sans:'Geist',ui-sans-serif,system-ui,sans-serif;--mono:'Geist Mono',ui-monospace,Menlo,monospace;--ease:cubic-bezier(0.16,1,0.3,1);} .ds-btn{display:inline-flex;align-items:center;gap:9px;height:52px;padding:0 26px;border:0;border-radius:999px;font:500 1.0625rem var(--sans);cursor:pointer;transition:background-color .15s,transform .15s var(--ease);} .ds-btn svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round;transition:transform .25s var(--ease);} .ds-btn:hover svg{transform:translateX(3px);} .ds-btn:active{transform:scale(.96);} .ds-btn:focus-visible{outline:2px solid var(--teal-ink);outline-offset:3px;} .ds-noite{background:var(--noite);padding:24px;} .ds-btn-photo{background:#fff;color:var(--ink);} .ds-btn-photo:hover{background:#e4f6f6;} .ds-btn-photo:focus-visible{outline-color:var(--mint);}"
+    },
+    {
+      "name": "Sub-elo e elo com seta",
+      "kind": "button",
+      "refersTo": "button-plate",
+      "description": "Link secundário sublinhado e link com seta em teal tinta.",
+      "html": "<div class=\"ds-links\"><a class=\"ds-sub\" href=\"#\">Ver no GitHub</a><a class=\"ds-elo\" href=\"#\">Ler o README <svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M5 12h14\"/><path d=\"m12 5 7 7-7 7\"/></svg></a></div>",
+      "css": ":root{--noite:#050a0b;--ink:#0a0f10;--ink-2:#465659;--ink-3:#5f7175;--paper:#fbfcfc;--line:rgba(10,15,16,.1);--line-2:rgba(10,15,16,.2);--teal:#1c99a7;--teal-ink:#136f7a;--mint:#9be8ea;--ambar-ink:#8a5a06;--plate:#0f343d;--sans:'Geist',ui-sans-serif,system-ui,sans-serif;--mono:'Geist Mono',ui-monospace,Menlo,monospace;--ease:cubic-bezier(0.16,1,0.3,1);}  .ds-links{display:flex;gap:26px;align-items:center;font:500 1.0625rem var(--sans);} .ds-sub{color:var(--ink);text-decoration:underline;text-decoration-thickness:1px;text-underline-offset:6px;text-decoration-color:rgba(10,15,16,.3);transition:text-decoration-color .15s;} .ds-sub:hover{text-decoration-color:var(--ink);} .ds-elo{display:inline-flex;align-items:center;gap:7px;min-height:44px;color:var(--teal-ink);text-decoration:none;} .ds-elo svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round;transition:transform .25s var(--ease);} .ds-elo:hover svg{transform:translateX(3px);} .ds-sub:focus-visible,.ds-elo:focus-visible{outline:2px solid var(--teal-ink);outline-offset:3px;border-radius:6px;}"
+    },
+    {
+      "name": "Chip de som",
+      "kind": "chip",
+      "refersTo": "chip-som",
+      "description": "Botão para ouvir um aviso sonoro do app; inverte enquanto toca.",
+      "html": "<div class=\"ds-opcoes\"><button class=\"ds-chip\"><svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M5 9.5h3l4.5-4v13L8 14.5H5Z\"/><path d=\"M16 9a4.2 4.2 0 0 1 0 6M18.6 6.5a7.8 7.8 0 0 1 0 11\"/></svg>Ouvir: terminou</button><button class=\"ds-chip ds-tocando\"><svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M5 9.5h3l4.5-4v13L8 14.5H5Z\"/><path d=\"M16 9a4.2 4.2 0 0 1 0 6M18.6 6.5a7.8 7.8 0 0 1 0 11\"/></svg>Ouvir: precisa de você</button></div>",
+      "css": ":root{--noite:#050a0b;--ink:#0a0f10;--ink-2:#465659;--ink-3:#5f7175;--paper:#fbfcfc;--line:rgba(10,15,16,.1);--line-2:rgba(10,15,16,.2);--teal:#1c99a7;--teal-ink:#136f7a;--mint:#9be8ea;--ambar-ink:#8a5a06;--plate:#0f343d;--sans:'Geist',ui-sans-serif,system-ui,sans-serif;--mono:'Geist Mono',ui-monospace,Menlo,monospace;--ease:cubic-bezier(0.16,1,0.3,1);}  .ds-opcoes{display:flex;gap:8px;} .ds-chip{display:inline-flex;align-items:center;gap:8px;height:40px;padding:0 15px 0 13px;border:0;border-radius:999px;background:transparent;box-shadow:inset 0 0 0 1px var(--line-2);font:500 .875rem var(--sans);color:var(--ink-2);cursor:pointer;transition:background-color .2s,color .2s,box-shadow .2s,transform .15s var(--ease);} .ds-chip svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round;} .ds-chip:hover{color:var(--ink);box-shadow:inset 0 0 0 1px var(--ink);} .ds-chip:active{transform:scale(.96);} .ds-chip:focus-visible{outline:2px solid var(--teal-ink);outline-offset:3px;} .ds-tocando{background:var(--ink);color:#fff;box-shadow:none;}"
+    },
+    {
+      "name": "Barra",
+      "kind": "nav",
+      "refersTo": "nav-pill",
+      "description": "Barra fixa no estado papel, depois da capa.",
+      "html": "<header class=\"ds-nav\"><a class=\"ds-marca\" href=\"#\">Revoada</a><nav class=\"ds-links\"><a href=\"#\">Como funciona</a><a href=\"#\">Segurança</a><a href=\"#\">Perguntas</a></nav><div class=\"ds-dir\"><a href=\"#\">GitHub</a><a class=\"ds-pill\" href=\"#\">Instalar</a></div></header>",
+      "css": ":root{--noite:#050a0b;--ink:#0a0f10;--ink-2:#465659;--ink-3:#5f7175;--paper:#fbfcfc;--line:rgba(10,15,16,.1);--line-2:rgba(10,15,16,.2);--teal:#1c99a7;--teal-ink:#136f7a;--mint:#9be8ea;--ambar-ink:#8a5a06;--plate:#0f343d;--sans:'Geist',ui-sans-serif,system-ui,sans-serif;--mono:'Geist Mono',ui-monospace,Menlo,monospace;--ease:cubic-bezier(0.16,1,0.3,1);}  .ds-nav{display:flex;align-items:center;gap:30px;height:68px;padding:0 32px;background:var(--paper);color:var(--ink);box-shadow:0 1px 0 var(--line);font:400 .9375rem var(--sans);} .ds-nav a{color:inherit;text-decoration:none;} .ds-marca{font-size:1.25rem;font-weight:600;letter-spacing:-.03em;} .ds-links{display:flex;gap:26px;} .ds-links a,.ds-dir>a:not(.ds-pill){opacity:.82;transition:opacity .15s;} .ds-links a:hover,.ds-dir>a:not(.ds-pill):hover{opacity:1;} .ds-dir{margin-left:auto;display:flex;align-items:center;gap:18px;} .ds-pill{display:inline-flex;align-items:center;height:40px;padding:0 18px;border-radius:999px;background:var(--plate);color:#fff !important;font-weight:500;transition:background-color .2s,transform .15s var(--ease);} .ds-pill:hover{background:#17505b;} .ds-pill:active{transform:scale(.96);} .ds-nav a:focus-visible{outline:2px solid var(--teal-ink);outline-offset:3px;border-radius:6px;}"
+    },
+    {
+      "name": "Fita",
+      "kind": "custom",
+      "refersTo": "fala",
+      "description": "Conversa transcrita: hora, falante, frase; fato, limite e volta como variações.",
+      "html": "<figure class=\"ds-cena\"><figcaption>Conversa de exemplo</figcaption><ol class=\"ds-fita\"><li class=\"ds-fala\"><time>14:05</time><b class=\"ds-agente\">Claude · pessoal</b><p>Troquei o cliente. Falta o checkout.</p></li><li class=\"ds-fala ds-fato ds-limite\"><time>14:05</time><b></b><p>Claude · pessoal bateu no limite. Continuando em Claude · trabalho.</p></li><li class=\"ds-fala\"><time>14:05</time><b class=\"ds-agente\">Claude · trabalho</b><p>Continuando do checkout. Rodei os testes: 42 passaram.</p></li><li class=\"ds-fala ds-volta\"><time></time><b></b><p>Seguiu no <strong>mesmo minuto</strong></p></li></ol></figure>",
+      "css": ":root{--noite:#050a0b;--ink:#0a0f10;--ink-2:#465659;--ink-3:#5f7175;--paper:#fbfcfc;--line:rgba(10,15,16,.1);--line-2:rgba(10,15,16,.2);--teal:#1c99a7;--teal-ink:#136f7a;--mint:#9be8ea;--ambar-ink:#8a5a06;--plate:#0f343d;--sans:'Geist',ui-sans-serif,system-ui,sans-serif;--mono:'Geist Mono',ui-monospace,Menlo,monospace;--ease:cubic-bezier(0.16,1,0.3,1);}  .ds-cena{margin:0;font-family:var(--sans);color:var(--ink);background:var(--paper);} .ds-cena figcaption{margin-bottom:10px;font-size:.8125rem;color:var(--ink-3);} .ds-fita{list-style:none;margin:0;padding:0;border-top:1px solid var(--line-2);} .ds-fala{display:grid;grid-template-columns:3.6rem 8.4rem minmax(0,1fr);gap:0 14px;align-items:baseline;padding:14px 0;border-bottom:1px solid var(--line);} .ds-fala time,.ds-fala b{font-size:.8125rem;color:var(--ink-3);font-weight:500;} .ds-fala time{font-variant-numeric:tabular-nums;} .ds-fala b.ds-agente{color:var(--teal-ink);} .ds-fala p{margin:0;font-size:1.125rem;line-height:1.38;letter-spacing:-.012em;} .ds-fato p{font-size:1rem;color:var(--ink-3);} .ds-limite p{color:var(--ambar-ink);} .ds-volta{padding-top:18px;border-bottom:0;} .ds-volta p{font-weight:600;font-size:1.5rem;letter-spacing:-.03em;} .ds-volta strong{font-weight:600;color:var(--teal-ink);}"
+    },
+    {
+      "name": "Bloco de comandos",
+      "kind": "custom",
+      "refersTo": "comandos-bloco",
+      "description": "Vidro escuro com os comandos de instalação e o botão Copiar.",
+      "html": "<div class=\"ds-noite\"><div class=\"ds-bloco\"><pre><code><span>git clone https://github.com/micaelmrsilva/revoada.git</span>\n<span>cd revoada</span>\n<span>bun install</span>\n<span>bun run app:install</span></code></pre><button class=\"ds-copiar\"><svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><rect x=\"8.5\" y=\"8.5\" width=\"11.5\" height=\"11.5\" rx=\"2\"/><path d=\"M15.5 8.5V6A2 2 0 0 0 13.5 4H6a2 2 0 0 0-2 2v7.5a2 2 0 0 0 2 2h2.5\"/></svg>Copiar</button></div></div>",
+      "css": ":root{--noite:#050a0b;--ink:#0a0f10;--ink-2:#465659;--ink-3:#5f7175;--paper:#fbfcfc;--line:rgba(10,15,16,.1);--line-2:rgba(10,15,16,.2);--teal:#1c99a7;--teal-ink:#136f7a;--mint:#9be8ea;--ambar-ink:#8a5a06;--plate:#0f343d;--sans:'Geist',ui-sans-serif,system-ui,sans-serif;--mono:'Geist Mono',ui-monospace,Menlo,monospace;--ease:cubic-bezier(0.16,1,0.3,1);}  .ds-noite{background:#0f343d;padding:24px;} .ds-bloco{position:relative;max-width:640px;} .ds-bloco pre{margin:0;padding:20px 112px 20px 22px;border-radius:18px;background:rgba(5,10,11,.62);box-shadow:inset 0 0 0 1px rgba(255,255,255,.16),0 30px 60px -36px rgba(0,0,0,.8);backdrop-filter:blur(10px);font:400 .9375rem/1.85 var(--mono);color:#e6f2f2;overflow-x:auto;} .ds-bloco code>span::before{content:'$ ';color:rgba(255,255,255,.4);user-select:none;} .ds-copiar{position:absolute;top:14px;right:14px;display:inline-flex;align-items:center;gap:7px;height:36px;padding:0 14px;border:0;border-radius:999px;background:rgba(255,255,255,.12);color:#fff;font:500 .875rem var(--sans);cursor:pointer;transition:background-color .15s,transform .15s var(--ease);} .ds-copiar svg{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;} .ds-copiar:hover{background:rgba(255,255,255,.2);} .ds-copiar:active{transform:scale(.96);} .ds-copiar:focus-visible{outline:2px solid var(--mint);outline-offset:3px;} .ds-copiar.feito{background:var(--mint);color:var(--plate);}"
+    },
+    {
+      "name": "Fatos da prancha de confiança",
+      "kind": "card",
+      "refersTo": "headline-prancha",
+      "description": "Três fatos sobre a noite, abertos por fio branco, sem cartão.",
+      "html": "<div class=\"ds-noite\"><div class=\"ds-fatos\"><p class=\"ds-oque\">Uma conta, um perfil isolado.<small>Cada conta usa a configuração própria do CLI.</small></p><p class=\"ds-oque\">Só no seu Mac.<small>O painel escuta em 127.0.0.1.</small></p><p class=\"ds-oque\">Código aberto.<small>Licença MIT, com os testes rodando a cada push.</small></p></div></div>",
+      "css": ":root{--noite:#050a0b;--ink:#0a0f10;--ink-2:#465659;--ink-3:#5f7175;--paper:#fbfcfc;--line:rgba(10,15,16,.1);--line-2:rgba(10,15,16,.2);--teal:#1c99a7;--teal-ink:#136f7a;--mint:#9be8ea;--ambar-ink:#8a5a06;--plate:#0f343d;--sans:'Geist',ui-sans-serif,system-ui,sans-serif;--mono:'Geist Mono',ui-monospace,Menlo,monospace;--ease:cubic-bezier(0.16,1,0.3,1);}  .ds-noite{background:var(--noite);color:#fff;padding:32px;font-family:var(--sans);} .ds-fatos{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:28px 40px;} .ds-oque{margin:0;padding-top:20px;border-top:1px solid rgba(255,255,255,.24);font-weight:600;font-size:1.4rem;line-height:1.15;letter-spacing:-.025em;} .ds-oque small{display:block;margin-top:10px;font-size:.9375rem;line-height:1.5;font-weight:400;letter-spacing:0;color:rgba(255,255,255,.7);}"
+    }
+  ],
+  "narrative": {
+    "northStar": "O Bando sobre o Papel",
+    "overview": "A Revoada é irmã do ararahq.com e fala a língua da Plumagem: noite quase preta nas pranchas de foto, papel quase branco entre elas, letra Geist enorme e apertada, fio de um pixel e um teal escuro que só aparece onde algo age. A diferença da Arara está na imagem: no lugar da plumagem, fotografias de bando (estorninhos em revoada na capa e no fecho, gansos em V na prova de segurança). O sistema foi fixado pelo usuário em 18/10/2026 e portado do protótipo da Arara (`lp-ticket-alto`), depois adaptado.\n\nA página alterna três pranchas escuras de foto (capa, confiança, fecho) com uma folha de papel que sobe por cima da capa presa. No papel, o produto se mostra como conversa transcrita em fita: hora, quem fala, a frase. Não existe tela desenhada nem moldura de app. A densidade é baixa e editorial: perguntas grandes, um parágrafo curto, uma fita, muito ar medido. A rejeição confirmada é a landing genérica de ferramenta de IA: print do app em moldura, grade de cartões e gradiente decorativo.\n\nO movimento é a assinatura: a capa chega com um zoom lento e respira, o título sobe linha a linha, a frase de baixo gira entre situações e volta à primeira, e cada capítulo toca a conversa fala a fala quando entra na tela. Tudo para com `prefers-reduced-motion`.",
+    "keyCharacteristics": [
+      "Duas superfícies apenas: noite com foto e papel. Nenhuma terceira cor de fundo.",
+      "Letra Geist 600 com tracking negativo forte; o tamanho faz a hierarquia, não a cor.",
+      "Fio fino (1px) estrutura capítulos, fitas, perguntas e fatos; nenhum cartão.",
+      "Teal tinta para agente e resultado; âmbar tinta para limite e perda.",
+      "Pílula branca sobre a foto, placa teal sobre o papel.",
+      "Grão gerado na hora sobre toda foto."
+    ],
+    "rules": [
+      {
+        "name": "A Regra das Duas Tintas",
+        "body": "Teal tinta só nomeia agente ou resultado; âmbar tinta só nomeia limite ou perda. Nenhuma das duas decora.",
+        "section": "colors"
+      },
+      {
+        "name": "A Regra do Par Claro e Escuro",
+        "body": "Toda cor de acento tem par: teal tinta e placa no papel, menta e branco na noite. Nunca leve o teal tinta para a foto nem a menta para o papel.",
+        "section": "colors"
+      },
+      {
+        "name": "A Regra do Peso Único",
+        "body": "Título é sempre 600 com tracking negativo proporcional ao tamanho; nunca 700, nunca caixa alta, nunca itálico.",
+        "section": "typography"
+      },
+      {
+        "name": "A Regra do Título que Equilibra",
+        "body": "Títulos usam `text-wrap: balance` e parágrafos `text-wrap: pretty`; frases longas de virada se partem em duas metades explícitas.",
+        "section": "typography"
+      },
+      {
+        "name": "A Regra do Véu",
+        "body": "Toda foto leva véu e grão. Texto nunca senta direto sobre a imagem crua.",
+        "section": "elevation"
+      },
+      {
+        "name": "A Regra do Papel Plano",
+        "body": "No papel não existe sombra; separação é fio de 1px ou espaço.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "**Do** alternar só duas superfícies: prancha de noite com foto, véu e grão, e folha de papel.",
+      "**Do** mostrar o produto como fala transcrita na fita, sempre com a legenda de exemplo.",
+      "**Do** usar teal tinta só para agente e resultado, e âmbar tinta só para limite e perda.",
+      "**Do** usar uma pílula cheia por bloco de ações, com sub-elo sublinhado ao lado.",
+      "**Do** separar com fio de 1px e espaço; abrir capítulo com fio em tinta.",
+      "**Do** escrever títulos em Geist 600 com tracking negativo e deixar a escala fazer a hierarquia.",
+      "**Do** desligar toda animação e transição com `prefers-reduced-motion`.",
+      "**Do** escrever a interface em português do Brasil, curta, sem travessão e sem emoji, com o nome uma vez por tela."
+    ],
+    "donts": [
+      "**Don't** pôr print do app em moldura, grade de cartões ou gradiente decorativo.",
+      "**Don't** criar terceira cor de fundo, nem cartão com sombra sobre o papel.",
+      "**Don't** pôr texto direto sobre foto sem véu.",
+      "**Don't** usar o teal vivo para texto corrido, nem a menta sobre o papel.",
+      "**Don't** mostrar bastidor técnico na interface (contador, fps, colofão).",
+      "**Don't** reaproveitar a primeira versão recusada (bando em canvas com céu do dia à noite) nem a janela de app recriada."
+    ]
+  }
+}

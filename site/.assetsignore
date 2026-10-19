@@ -1,0 +1,7 @@
+# o que fica fora do que a Cloudflare serve
+wrangler.jsonc
+.assetsignore
+.gitignore
+.wrangler
+*.webp.json
+_fonte
